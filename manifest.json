@@ -1,0 +1,21 @@
+{
+    "manifest_version": 3,
+    "name": "postToP_ai_showcase",
+    "description": "PosToP AI Showcase",
+    "version": "1.0",
+    "permissions": [
+        "tabs",
+        "scripting",
+        "activeTab",
+        "storage"
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "host_permissions": [
+        "https://www.youtube.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    }
+}

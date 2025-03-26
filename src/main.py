@@ -71,7 +71,7 @@ final_val_df_labels = final_val_df['Is Music'].values.astype(int)
 def compile_final():
     print("Compiling model")
     title_tokenizer = TokenizerNgram((1, 3))
-    title_vectorizer = TokenizerNgram(8500)
+    title_vectorizer = VectorizerCount(8500)
     description_tokenizer = TokenizerWord()
     description_vectorizer = VectorizerTFIDF()
     category_tokenizer = TokenizerNone()

@@ -478,9 +478,13 @@ class DatasetPreprocessor:
         for i in range(len(df)):
             for j in range(i + 1, len(df)):
                 if similarity_matrix[i, j] >= threshold:
-                    if df['Is Music'][i] != df['Is Music'][j]:
+                    # Skip if any of the values to compare is None
+                    if df['Is Music'].iloc[i] is None or df['Is Music'].iloc[j] is None:
                         continue
-                    rows_to_remove.add(j)
+                    if df['Is Music'].iloc[i] != df['Is Music'].iloc[j]:
+                        continue
+                    # Use actual index value instead of position
+                    rows_to_remove.add(df.index[j])
 
         new_df = df.drop(index=list(rows_to_remove)).reset_index(drop=True)
         return new_df

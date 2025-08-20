@@ -33,19 +33,13 @@ def encode_df(dataset, tokenizer, vectorizer):
     return train_vectors, val_vectors, test_vectors
 
 
-dataset = pd.read_json('dataset/combined_data.json')
+dataset = pd.read_json('dataset/videos.json')
+
+dataset = dataset.dropna(subset=['Is Music'])
 
 # Initial data cleaning
-# dataset = dataset.drop(['ID', 'Language'], axis=1)
-dataset = dataset.drop(['ID'], axis=1)
 dataset["Title"] = dataset["Title"].fillna("")
 dataset["Description"] = dataset["Description"].fillna("")
-
-# Clean categories and convert duration
-dataset['Categories'] = dataset['Categories'].apply(
-    TextPreprocessor.clean_categories)
-dataset['Duration'] = dataset['Duration'].apply(
-    TextPreprocessor.convert_duration)
 
 # Process text columns
 text_columns = ['Title', 'Description']

@@ -16,7 +16,7 @@ def get_connection():
     )
     return conn
 
-if __name__ == "__main__":
+def fetch_videos():
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""SELECT
@@ -44,7 +44,9 @@ FROM
     videos = cursor.fetchall()
     cursor.close()
     conn.close()
+    return videos
 
+def convert_postgres_videos_to_json(videos):
     all_vids = []
     for video in videos:
         v = {}
@@ -57,9 +59,21 @@ FROM
         v["Categories"] = video[6].split(',') if video[6] else []
         v["Is Music"] = video[7]
         all_vids.append(v)
+    return all_vids
 
-    
-    print(f"Retrieved {len(all_vids)} videos from the database.")
+def save_videos_to_json(videos, filename='dataset/videos.json'):
+    with open(filename, 'w') as f:
+        json.dump(videos, f, indent=4)
 
-    with open('dataset/videos.json', 'w') as f:
-        json.dump(all_vids, f, indent=4)
+def main():
+    videos = fetch_videos()
+    if not videos:
+        print("No videos found.")
+        return
+
+    video_json = convert_postgres_videos_to_json(videos)
+    save_videos_to_json(video_json)
+    print(f"Saved {len(video_json)} videos to dataset/videos.json")
+
+if __name__ == "__main__":
+    main()

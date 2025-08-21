@@ -1,5 +1,5 @@
 import unittest
-from src.text_cleaning import TextPreprocessor
+from data.text_cleaning import TextPreprocessor
 
 
 class TextCleaningTest(unittest.TestCase):

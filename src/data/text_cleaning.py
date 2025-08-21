@@ -578,9 +578,3 @@ def split_dataset(dataset, test_size=0.1):
     train_df = train_df.reset_index(drop=True)
     test_df = test_df.reset_index(drop=True)
     return train_df, test_df
-
-
-if __name__ == "__main__":
-    string = """izanai / イルマ feat.初音ミク"""
-    preprocessor = generate_test_preprocess_pipeline()
-    print(preprocessor.process_text(string))

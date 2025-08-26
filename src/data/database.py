@@ -34,7 +34,7 @@ FROM
     INNER JOIN posttop.is_music_video imv ON v.id = imv.video_id
     INNER JOIN posttop.channel c ON v.channel_id = c.id
     LEFT JOIN (
-        SELECT v.id, string_agg(cat.name, ',') cats
+        SELECT v.id, array_agg(cat.name) cats
         from posttop.video v
             INNER join posttop.video_category vc ON v.id = vc.video_id
             INNER JOIN posttop.category cat ON vc.category_id = cat.id
@@ -56,7 +56,7 @@ def convert_postgres_videos_to_json(videos):
         v["Duration"] = video[3]
         v["Language"] = video[4]
         v["Category"] = video[5]
-        v["Categories"] = video[6].split(',') if video[6] else []
+        v["Categories"] = video[6] if video[6] else []
         v["Is Music"] = video[7]
         all_vids.append(v)
     return all_vids

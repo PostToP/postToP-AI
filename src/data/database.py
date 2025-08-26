@@ -33,7 +33,7 @@ FROM
     INNER JOIN posttop.video_metadata vm ON v.id = vm.video_id
     INNER JOIN posttop.is_music_video imv ON v.id = imv.video_id
     INNER JOIN posttop.channel c ON v.channel_id = c.id
-    INNER JOIN (
+    LEFT JOIN (
         SELECT v.id, string_agg(cat.name, ',') cats
         from posttop.video v
             INNER join posttop.video_category vc ON v.id = vc.video_id

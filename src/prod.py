@@ -1,12 +1,12 @@
 import pickle
 import dill
-import tensorflow as tf
 import numpy as np
 from flask import Flask, request, jsonify
 from data.text_cleaning import TextPreprocessor
+from model.ModelWrapper import ModelWrapper
 
-with open('model.pkl', 'rb') as f:
-    model = dill.load(f)
+model = ModelWrapper.deserialize('model/v1.pkl')
+model.load_model()
 
 app = Flask(__name__)
 
@@ -17,8 +17,7 @@ def predict():
         title = data['title']
         description = data['description']
         categories = data['categories']
-        duration = data['duration']
-        duration = TextPreprocessor.convert_duration(duration)
+        duration = [data['duration']]
 
         prediction = model.predict(
             title, description, categories, duration)

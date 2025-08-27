@@ -10,6 +10,7 @@ import pandas as pd
 from data.text_cleaning import  generate_test_preprocess_pipeline, split_dataset
 from model.tokenizer import TokenizerNgram, TokenizerNone, TokenizerWord
 from model.vectorizer import VectorizerCount, VectorizerLabel, VectorizerTFIDF
+from model.ModelWrapper import ModelWrapper
 
 
 def encode_df(dataset, tokenizer, vectorizer):
@@ -115,39 +116,8 @@ def create_model():
 
     model, title_pipeline, description_pipeline, category_pipeline = compile_final()
 
-
-    class ModelWrapper:
-        def __init__(self, model, title_pipeline, description_pipeline, category_pipeline):
-            self.model = model
-            self.title_pipeline = title_pipeline
-            self.description_pipeline = description_pipeline
-            self.category_pipeline = category_pipeline
-            self.text_cleaner = generate_test_preprocess_pipeline()
-
-        def predict(self, title, description, category, duration):
-            title = self.text_cleaner.process_text(title)
-            description = self.text_cleaner.process_text(description)
-            title = self.title_pipeline[0].encode(title)
-            description = self.description_pipeline[0].encode(description)
-            category = self.category_pipeline[0].encode(category)
-            duration = [duration]
-
-            title = self.title_pipeline[1].encode(title)
-            description = self.description_pipeline[1].encode(description)
-            category = self.category_pipeline[1].encode(category)
-
-            title = np.array(title)
-            description = np.array(description)
-            category = np.array(category)
-            duration = np.array(duration)
-
-            title = title.reshape(1, -1)
-            description = description.reshape(1, -1)
-            category = category.reshape(1, -1)
-            duration = duration
-
-            return self.model.predict([title, description, category, duration])
-
-    with open('model.pkl', 'wb') as f:
-        dill.dump(ModelWrapper(model, title_pipeline,
-                description_pipeline, category_pipeline), f)
+    converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    tflite_model = converter.convert()
+    model_wrapper = ModelWrapper(title_pipeline, description_pipeline, category_pipeline)
+    model_wrapper.save_model(tflite_model, 'model/model.tflite')
+    model_wrapper.serialize('model/v1.pkl')

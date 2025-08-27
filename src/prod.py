@@ -22,16 +22,13 @@ def predict():
         prediction = model.predict(
             title, description, categories, duration)
 
-        print(prediction)
-
         return jsonify({
             'prediction': prediction.tolist(),
-            'status': 'success'
+            'version': 'v1.0.0'
         })
     except Exception as e:
         return jsonify({
             'error': str(e),
-            'status': 'error'
         }), 400
 
 if __name__ == '__main__':

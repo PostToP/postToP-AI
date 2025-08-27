@@ -173,8 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-*.pkl
 dataset/
 .vscode/
 *.tar
-*.tflite

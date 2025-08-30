@@ -28,6 +28,9 @@ class ModelWrapper:
             self.interpreter = Interpreter(self.model_path)
             self.interpreter.allocate_tensors()
 
+        def warmup(self):
+            self.predict("Warmup title", "Warmup description", ["Music"], [300])
+
         def preprocess_input(self, title, description, category, duration):
             title = self.text_cleaner.process_text(title)
             description = self.text_cleaner.process_text(description)

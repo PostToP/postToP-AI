@@ -9,8 +9,6 @@ from tokenizers.models import WordLevel
 from tokenizers.trainers import WordLevelTrainer
 
 class IVectorizer:
-    name = "Vectorizer"
-
     def train(self, text):
         pass
 
@@ -23,10 +21,12 @@ class IVectorizer:
     def getDict(self):
         pass
 
+    def __repr__(self):
+        pass
+
 
 class VectorizerSequential(IVectorizer):
     def __init__(self, vocab_size=5000, max_sequence_length=100):
-        self.name = f"VectorizerSequential_{vocab_size}"
         self.vocab_size = vocab_size
         self.max_sequence_length = max_sequence_length
         self.vectorizer = Tokenizer(WordLevel(unk_token="[UNK]"))
@@ -49,11 +49,13 @@ class VectorizerSequential(IVectorizer):
 
     def getDict(self):
         return self.vectorizer.__dict__()
+    
+    def __repr__(self):
+        return f"VectorizerSequential_{self.vocab_size}_{self.max_sequence_length}"
 
 
 class VectorizerCount(IVectorizer):
     def __init__(self, max_features=5000):
-        self.name = f"VectorizerCount_{max_features}"
         self.vectorizer = CountVectorizer(
             tokenizer=lambda doc: doc, preprocessor=lambda doc: doc, lowercase=False, max_features=max_features)
 
@@ -71,11 +73,13 @@ class VectorizerCount(IVectorizer):
         voc = self.vectorizer.vocabulary_
         voc = dict(sorted(voc.items(), key=lambda item: item[1]))
         return voc
+    
+    def __repr__(self):
+        return f"VectorizerCount_{len(self.vectorizer.vocabulary_)}"
 
 
 class VectorizerTFIDF(IVectorizer):
     def __init__(self, max_features=5000):
-        self.name = f"VectorizerTFIDF_{max_features}"
         self.vectorizer = TfidfVectorizer(
             tokenizer=lambda doc: doc, preprocessor=lambda doc: doc, lowercase=False, max_features=max_features)
 
@@ -93,11 +97,13 @@ class VectorizerTFIDF(IVectorizer):
         voc = self.vectorizer.vocabulary_
         voc = dict(sorted(voc.items(), key=lambda item: item[1]))
         return voc
+    
+    def __repr__(self):
+        return f"VectorizerTFIDF_{len(self.vectorizer.vocabulary_)}"
 
 
 class VectorizerLabel(IVectorizer):
-    def __init__(self, max_features=0):
-        self.name = "VectorizerLabel"
+    def __init__(self):
         self.vectorizer = MultiLabelBinarizer()
 
     def train(self, dataset):
@@ -114,13 +120,14 @@ class VectorizerLabel(IVectorizer):
         voc = self.vectorizer.classes_
         voc = dict(zip(voc, range(len(voc))))
         return voc
+    
+    def __repr__(self):
+        return f"VectorizerLabel"
 
 
 class VectorizerWord2Vec(IVectorizer):
     def __init__(self, max_features=300):
-        self.name = f"VectorizerWord2Vec_{max_features}"
         self.max_features = max_features
-        pass
 
     def train(self, dataset):
         max_workers = multiprocessing.cpu_count()
@@ -143,11 +150,13 @@ class VectorizerWord2Vec(IVectorizer):
 
     def getDict(self):
         return self.vectorizer.wv.key_to_index
+    
+    def __repr__(self):
+        return f"VectorizerWord2Vec_{self.max_features}"
 
 
 class VectorizerBert(IVectorizer):
     def __init__(self):
-        self.name = "VectorizerBert"
         self.vectorizer = SentenceTransformer(
             'paraphrase-multilingual-MiniLM-L12-v2', device='cpu')
 
@@ -186,11 +195,13 @@ class VectorizerBert(IVectorizer):
     def getDict(self):
         voc = self.vectorizer.tokenizer.get_vocab()
         return dict(sorted(voc.items(), key=lambda item: item[1]))
+    
+    def __repr__(self):
+        return "VectorizerBert"
 
 
 class VectorizerGloVe(IVectorizer):
     def __init__(self):
-        self.name = "VectorizerGloVe"
         self.vectorizer = SentenceTransformer(
             'sentence-transformers/average_word_embeddings_glove.6B.300d')
 
@@ -209,3 +220,6 @@ class VectorizerGloVe(IVectorizer):
 
     def getDict(self):
         return {}
+    
+    def __repr__(self):
+        return "VectorizerGloVe"

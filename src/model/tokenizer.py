@@ -9,8 +9,6 @@ nltk_download('punkt_tab')
 
 
 class ITokenizer:
-    name = "Tokenizer"
-
     def train(self, text):
         pass
 
@@ -20,6 +18,9 @@ class ITokenizer:
     def encode_batch(self, texts):
         pass
 
+    def __repr__(self):
+        pass
+
 
 class TokenizerNone(ITokenizer):
     def encode(self, text):
@@ -27,23 +28,24 @@ class TokenizerNone(ITokenizer):
 
     def encode_batch(self, texts):
         return texts
+    
+    def __repr__(self):
+        return "TokenizerNone"
 
 
 class TokenizerWord(ITokenizer):
-    name = "TokenizerWord"
-
     def encode(self, text):
         return word_tokenize(text)
 
     def encode_batch(self, texts):
         return [self.encode(text) for text in texts]
+    
+    def __repr__(self):
+        return "TokenizerWord"
 
 
 class TokenizerNgram(ITokenizer):
-    name = "TokenizerNgram"
-
     def __init__(self, ngram_range=(1, 2)):
-        self.name = f"TokenizerNgram_{ngram_range[0]}_{ngram_range[1]}"
         self.ngram_range = ngram_range
 
     def ngram_tokenize_text_range(self, text):
@@ -58,13 +60,13 @@ class TokenizerNgram(ITokenizer):
 
     def encode_batch(self, texts):
         return [self.encode(text) for text in texts]
+    
+    def __repr__(self):
+        return f"TokenizerNgram_{self.ngram_range[0]}-{self.ngram_range[1]}"
 
 
 class TokenizerBPE(ITokenizer):
-    name = "TokenizerBPE"
-
     def __init__(self, vocab_size=10000):
-        self.name = f"TokenizerBPE_{vocab_size}"
         self.vocab_size = vocab_size
         self.tokenizer = None
 
@@ -80,3 +82,6 @@ class TokenizerBPE(ITokenizer):
 
     def encode_batch(self, texts):
         return [self.encode(text) for text in texts]
+    
+    def __repr__(self):
+        return f"TokenizerBPE_{self.vocab_size}"

@@ -53,10 +53,15 @@ class ModelWrapper:
             input_details = self.interpreter.get_input_details()
             output_details = self.interpreter.get_output_details()
 
-            self.interpreter.set_tensor(input_details[0]['index'], category)
-            self.interpreter.set_tensor(input_details[1]['index'], description)
-            self.interpreter.set_tensor(input_details[2]['index'], duration)
-            self.interpreter.set_tensor(input_details[3]['index'], title)
+            input_dict = {
+                "serving_default_title_input:0": title,
+                "serving_default_desc_input:0": description,
+                "serving_default_cat_input:0": category,
+                "serving_default_dur_input:0": duration
+            }
+
+            for detail in input_details:
+                self.interpreter.set_tensor(detail['index'], input_dict[detail['name']])
 
             self.interpreter.invoke()
 

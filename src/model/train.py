@@ -5,10 +5,12 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model
 import pandas as pd
 from data.text_cleaning import  split_dataset
-from model.tokenizer import TokenizerBPE, TokenizerNone, TokenizerWord
-from model.vectorizer import VectorizerLabel, VectorizerSequential
 from model.ModelWrapper import ModelWrapper
 import logging
+from vectorizer.VectorizerLabel import VectorizerLabel
+from vectorizer.VectorizerSequential import VectorizerSequential
+from tokenizer.TokenizerWhitespace import TokenizerWhitespace
+from tokenizer.TokenizerNone import TokenizerNone
 
 logger = logging.getLogger("experiment")
 
@@ -43,9 +45,9 @@ def create_model():
     final_test_df_labels = final_test_df['Is Music'].values.astype(int)
 
     logger.info("Compiling model")
-    title_tokenizer = TokenizerWord()
+    title_tokenizer = TokenizerWhitespace()
     title_vectorizer = VectorizerSequential(8500,20)
-    description_tokenizer = TokenizerWord()
+    description_tokenizer = TokenizerWhitespace()
     description_vectorizer = VectorizerSequential(5000,100)
     category_tokenizer = TokenizerNone()
     category_vectorizer = VectorizerLabel()

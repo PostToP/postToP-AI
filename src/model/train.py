@@ -1,17 +1,16 @@
-import numpy as np
-import pickle
-import dill
-from tensorflow.keras.layers import Dense, Input, Dropout
+from tensorflow.keras.layers import Dense, Input, Dropout, Embedding, GlobalAveragePooling1D
 import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model
 import pandas as pd
-from data.text_cleaning import  generate_test_preprocess_pipeline, split_dataset
-from model.tokenizer import TokenizerNgram, TokenizerNone, TokenizerWord
-from model.vectorizer import VectorizerCount, VectorizerLabel, VectorizerTFIDF
+from data.text_cleaning import  split_dataset
+from model.tokenizer import TokenizerBPE, TokenizerNone, TokenizerWord
+from model.vectorizer import VectorizerLabel, VectorizerSequential
 from model.ModelWrapper import ModelWrapper
+import logging
 
+logger = logging.getLogger("experiment")
 
 def encode_df(dataset, tokenizer, vectorizer):
     train, val, test = dataset
@@ -34,87 +33,99 @@ def encode_df(dataset, tokenizer, vectorizer):
 
 def create_model():
     train_df = pd.read_json('dataset/p2_dataset.json')
-
+    logger.info(f"Dataset size: {len(train_df)}")
+    
     final_train_df, final_val_df = split_dataset(train_df)
+    final_val_df, final_test_df = split_dataset(final_val_df, test_size=0.5)
+    logger.debug(f"Train size: {len(final_train_df)}, Val size: {len(final_val_df)}, Test size: {len(final_test_df)}")
     final_train_df_labels = final_train_df['Is Music'].values.astype(int)
     final_val_df_labels = final_val_df['Is Music'].values.astype(int)
+    final_test_df_labels = final_test_df['Is Music'].values.astype(int)
+
+    logger.info("Compiling model")
+    title_tokenizer = TokenizerWord()
+    title_vectorizer = VectorizerSequential(8500,20)
+    description_tokenizer = TokenizerWord()
+    description_vectorizer = VectorizerSequential(5000,100)
+    category_tokenizer = TokenizerNone()
+    category_vectorizer = VectorizerLabel()
+    logger.debug(f"Title pipeline: {title_tokenizer}, {title_vectorizer}")
+    logger.debug(f"Description pipeline: {description_tokenizer}, {description_vectorizer}")
+    logger.debug(f"Category pipeline: {category_tokenizer}, {category_vectorizer}")
 
 
-    def compile_final():
-        print("Compiling model")
-        title_tokenizer = TokenizerNgram((1, 3))
-        title_vectorizer = VectorizerCount(8500)
-        description_tokenizer = TokenizerWord()
-        description_vectorizer = VectorizerTFIDF()
-        category_tokenizer = TokenizerNone()
-        category_vectorizer = VectorizerLabel()
+    logger.info("Encoding data")
 
-        print("Encoding data")
+    train_title_vectors, val_title_vectors, test_title_vectors = encode_df(
+        (final_train_df['Title'], final_val_df['Title'], final_test_df['Title']), title_tokenizer, title_vectorizer)
+    logger.info(f"Title done")
+    logger.debug(f"Title train shape: {train_title_vectors.shape}, val shape: {val_title_vectors.shape}, test shape: {test_title_vectors.shape}")
+    train_desc_vectors, val_desc_vectors, test_desc_vectors = encode_df(
+        (final_train_df['Description'], final_val_df['Description'], final_test_df['Description']), description_tokenizer, description_vectorizer)
+    logger.info(f"Description done")
+    logger.debug(f"Description train shape: {train_desc_vectors.shape}, val shape: {val_desc_vectors.shape}, test shape: {test_desc_vectors.shape}")
+    train_cat_vectors, val_cat_vectors, test_cat_vectors = encode_df(
+        (final_train_df['Categories'], final_val_df['Categories'], final_test_df['Categories']), category_tokenizer, category_vectorizer)
+    logger.info(f"Category done")
+    logger.debug(f"Category train shape: {train_cat_vectors.shape}, val shape: {val_cat_vectors.shape}, test shape: {test_cat_vectors.shape}")
+    train_duration = final_train_df["Duration"].values.astype(int)
+    val_duration = final_val_df["Duration"].values.astype(int)
+    test_duration = final_test_df["Duration"].values.astype(int)
 
-        train_title_vectors, val_title_vectors, test_title_vectors = encode_df(
-            (final_train_df['Title'], final_val_df['Title'], None), title_tokenizer, title_vectorizer)
-        print("Title done")
-        train_desc_vectors, val_desc_vectors, test_desc_vectors = encode_df(
-            (final_train_df['Description'], final_val_df['Description'], None), description_tokenizer, description_vectorizer)
-        print("Description done")
-        train_cat_vectors, val_cat_vectors, test_cat_vectors = encode_df(
-            (final_train_df['Categories'], final_val_df['Categories'], None), category_tokenizer, category_vectorizer)
-        print("Category done")
-        train_duration = final_train_df["Duration"].values.astype(int)
-        val_duration = final_val_df["Duration"].values.astype(int)
+    title_input = Input(shape=(train_title_vectors.shape[1],), name="title_input")
+    title_x = Embedding(input_dim=8500, output_dim=12)(title_input)
+    title_x = GlobalAveragePooling1D()(title_x)
+    title_x = Dense(8, activation="elu")(title_x)
+    title_x = Dropout(0.2)(title_x)
 
-        title_input = Input(shape=(train_title_vectors.shape[1],))
-        title_x = Dense(4, activation='elu')(title_input)
-        title_x = Dropout(0.1)(title_x)
-        title_x = Dense(2, activation='sigmoid')(title_x)
-        title_x = Dropout(0.2)(title_x)
+    desc_input = Input(shape=(train_desc_vectors.shape[1],), name="desc_input")
+    desc_x = Embedding(input_dim=5000, output_dim=16)(desc_input)
+    desc_x = GlobalAveragePooling1D()(desc_x)
+    desc_x = Dense(64, activation='relu')(desc_x)
+    desc_x = Dropout(0.1)(desc_x)
 
-        desc_input = Input(shape=(train_desc_vectors.shape[1],))
-        desc_x = Dense(64, activation='relu')(desc_input)
-        desc_x = Dropout(0.1)(desc_x)
+    cat_input = Input(shape=(train_cat_vectors.shape[1],), name="cat_input")
+    cat_x = cat_input
 
-        cat_input = Input(shape=(train_cat_vectors.shape[1],))
-        cat_x = cat_input
+    dur_input = Input(shape=(1,), name="dur_input")
+    dur_x = Dense(8, activation='sigmoid')(dur_input)
+    dur_x = Dropout(0.2)(dur_x)
+    dur_x = Dense(4, activation='tanh')(dur_x)
+    dur_x = Dropout(0.3)(dur_x)
 
-        dur_input = Input(shape=(1,))
-        dur_x = Dense(8, activation='sigmoid')(dur_input)
-        dur_x = Dropout(0.2)(dur_x)
-        dur_x = Dense(4, activation='tanh')(dur_x)
-        dur_x = Dropout(0.3)(dur_x)
+    combined = layers.concatenate([title_x, desc_x, cat_x, dur_x])
+    x = combined
 
-        combined = layers.concatenate([title_x, desc_x, cat_x, dur_x])
-        x = combined
+    output = layers.Dense(1, activation='sigmoid')(x)
 
-        output = layers.Dense(1, activation='sigmoid')(x)
+    model = Model(inputs=[title_input, desc_input,
+                cat_input, dur_input], outputs=output)
 
-        model = Model(inputs=[title_input, desc_input,
-                    cat_input, dur_input], outputs=output)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
+    model.compile(
+        optimizer=optimizer,
+        loss='binary_crossentropy',
+        metrics=['accuracy']
+    )
+    anti_overfit = EarlyStopping(
+        monitor='val_loss', patience=40, restore_best_weights=True, mode="min", min_delta=0.001)
+    model.fit(
+        [train_title_vectors, train_desc_vectors,
+            train_cat_vectors, train_duration],
+        final_train_df_labels,
+        epochs=5000,
+        batch_size=512,
+        validation_data=([val_title_vectors, val_desc_vectors,
+                        val_cat_vectors, val_duration], final_val_df_labels),
+        callbacks=[anti_overfit],)
+    
+    loss, acc = model.evaluate(
+        [test_title_vectors, test_desc_vectors, test_cat_vectors, test_duration], final_test_df_labels, verbose=2)
+    logger.info(f"Validation accuracy: {acc}, loss: {loss}")
 
-        optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
-        model.compile(
-            optimizer=optimizer,
-            loss='binary_crossentropy',
-            metrics=['accuracy']
-        )
-        anti_overfit = EarlyStopping(
-            monitor='val_loss', patience=20, restore_best_weights=True, min_delta=0.005, mode="min")
-        model.fit(
-            [train_title_vectors, train_desc_vectors,
-                train_cat_vectors, train_duration],
-            final_train_df_labels,
-            epochs=5000,
-            validation_data=([val_title_vectors, val_desc_vectors,
-                            val_cat_vectors, val_duration], final_val_df_labels),
-            callbacks=[anti_overfit],)
-
-        title_pipeline = (title_tokenizer, title_vectorizer)
-        description_pipeline = (description_tokenizer, description_vectorizer)
-        category_pipeline = (category_tokenizer, category_vectorizer)
-
-        return model, title_pipeline, description_pipeline, category_pipeline
-
-
-    model, title_pipeline, description_pipeline, category_pipeline = compile_final()
+    title_pipeline = (title_tokenizer, title_vectorizer)
+    description_pipeline = (description_tokenizer, description_vectorizer)
+    category_pipeline = (category_tokenizer, category_vectorizer)
 
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     tflite_model = converter.convert()

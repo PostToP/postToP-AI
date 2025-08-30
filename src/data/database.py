@@ -1,10 +1,11 @@
+import logging
 import psycopg2
 import json
 from dotenv import load_dotenv
 import os
 load_dotenv()
 
-
+logger = logging.getLogger("experiment")
 
 def get_connection():
     conn = psycopg2.connect(
@@ -68,12 +69,12 @@ def save_videos_to_json(videos, filename='dataset/videos.json'):
 def main():
     videos = fetch_videos()
     if not videos:
-        print("No videos found.")
+        logger.error("No videos fetched from database")
         return
 
     video_json = convert_postgres_videos_to_json(videos)
     save_videos_to_json(video_json)
-    print(f"Saved {len(video_json)} videos to dataset/videos.json")
+    logger.debug(f"Saved {len(video_json)} videos to dataset/videos.json")
 
 if __name__ == "__main__":
     main()

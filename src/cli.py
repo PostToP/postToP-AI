@@ -1,4 +1,5 @@
 import sys
+import log
 
 def main():
     if len(sys.argv) < 2:

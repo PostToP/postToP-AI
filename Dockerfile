@@ -13,6 +13,8 @@ RUN pip install --no-cache-dir -r requirements-prod.txt
 
 RUN python -m spacy download en_core_web_sm
 
+RUN pip install --no-cache-dir waitress
+
 COPY . .
 
 EXPOSE 5000

@@ -2,7 +2,6 @@ import multiprocessing
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
-from spacy import load as spacy_load
 import contractions
 import random
 from nltk.corpus import words, wordnet, stopwords
@@ -14,13 +13,14 @@ from unicodedata import normalize, combining
 from functools import partial
 import re
 import pandas as pd
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
 
 # Download required NLTK resources
 nltk_download('words', quiet=True)
 nltk_download('stopwords', quiet=True)
-
-# Load spaCy model
-nlp_en = spacy_load("en_core_web_sm", disable=["ner", "parser", "senter"])
+nltk_download('punkt', quiet=True)
+nltk_download('wordnet', quiet=True)
 
 # Define custom contractions
 contractions.add("feat", "featuring")
@@ -180,7 +180,7 @@ class TextPreprocessor:
 
     @staticmethod
     def lemmatize_text(text: str) -> str:
-        """Lemmatize text using spaCy
+        """Lemmatize text using NLTK
 
         Args:
             text (str): Input text
@@ -188,13 +188,14 @@ class TextPreprocessor:
         Returns:
             str: Lemmatized text
         """
-        doc = nlp_en(text)
-        lemmatized_sentence = [token.lemma_ for token in doc]
+        lemmatizer = WordNetLemmatizer()
+        tokens = word_tokenize(text)
+        lemmatized_sentence = [lemmatizer.lemmatize(token) for token in tokens]
         return " ".join(lemmatized_sentence)
 
     @staticmethod
     def batch_lemmatize(texts: list[str]) -> list[str]:
-        """Lemmatize a list of texts in batches
+        """Lemmatize a list of texts
 
         Args:
             texts (list[str]): List of input texts
@@ -202,9 +203,13 @@ class TextPreprocessor:
         Returns:
             list[str]: List of lemmatized texts
         """
+        lemmatizer = WordNetLemmatizer()
         lemmatized_texts = []
-        for doc in nlp_en.pipe(texts, batch_size=50):
-            lemmatized_texts.append(" ".join([token.lemma_ for token in doc]))
+        
+        for text in texts:
+            tokens = word_tokenize(text)
+            lemmatized_texts.append(" ".join([lemmatizer.lemmatize(token) for token in tokens]))
+        
         return lemmatized_texts
 
     @staticmethod
@@ -566,6 +571,7 @@ def split_dataset(dataset, test_size=0.1):
 
     # Train-test split
     from sklearn.model_selection import train_test_split
+
     train_df, test_df = train_test_split(
         balanced_dataset, test_size=test_size, random_state=42)
 

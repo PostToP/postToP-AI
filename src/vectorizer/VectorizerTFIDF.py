@@ -5,6 +5,7 @@ class VectorizerTFIDF(IVectorizer):
     def __init__(self, max_features=5000):
         self.vectorizer = TfidfVectorizer(
             tokenizer=lambda doc: doc, preprocessor=lambda doc: doc, lowercase=False, max_features=max_features)
+        self.output_dim = max_features
 
     def train(self, dataset):
         self.vectorizer.fit(dataset)

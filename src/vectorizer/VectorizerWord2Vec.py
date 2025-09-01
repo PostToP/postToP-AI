@@ -5,12 +5,12 @@ import multiprocessing
 
 class VectorizerWord2Vec(IVectorizer):
     def __init__(self, max_features=300):
-        self.max_features = max_features
+        self.output_dim = max_features
 
     def train(self, dataset):
         max_workers = multiprocessing.cpu_count()
         self.vectorizer = Word2Vec(
-            sentences=dataset, vector_size=self.max_features, window=3, min_count=1, workers=max_workers)
+            sentences=dataset, vector_size=self.output_dim, window=3, min_count=1, workers=max_workers)
 
     def encode(self, text):
         doc_vec = np.zeros(self.vectorizer.vector_size)

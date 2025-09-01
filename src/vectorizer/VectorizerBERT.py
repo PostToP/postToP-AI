@@ -6,6 +6,7 @@ class VectorizerBert(IVectorizer):
     def __init__(self):
         self.vectorizer = SentenceTransformer(
             'paraphrase-multilingual-MiniLM-L12-v2', device='cpu')
+        self.output_dim = 384
 
     def train(self, dataset):
         # BERT models are pre-trained and don't need further training

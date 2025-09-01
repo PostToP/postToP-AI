@@ -1,4 +1,5 @@
 class IVectorizer:
+    output_dim = 0
     def train(self, text):
         pass
 

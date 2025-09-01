@@ -8,6 +8,10 @@ class VectorizerLabel(IVectorizer):
     def train(self, dataset):
         self.vectorizer.fit(dataset)
 
+    @property
+    def output_dim(self):
+        return len(self.vectorizer.classes_)
+
     def encode(self, text):
         text = [text]
         return self.vectorizer.transform(text)[0]

@@ -6,6 +6,7 @@ class VectorizerGloVe(IVectorizer):
     def __init__(self):
         self.vectorizer = SentenceTransformer(
             'sentence-transformers/average_word_embeddings_glove.6B.300d')
+        self.output_dim = 300
 
     def train(self, dataset):
         pass

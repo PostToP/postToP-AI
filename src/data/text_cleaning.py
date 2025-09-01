@@ -559,9 +559,12 @@ def generate_test_preprocess_pipeline() -> DatasetPreprocessor:
 
 
 def split_dataset(dataset, test_size=0.1):
+    column = 'Is Music'
+    if column not in dataset.columns:
+        column = dataset.columns[-1]
     # Create balanced dataset
-    positive_samples = dataset[dataset['Is Music'] == 1]
-    negative_samples = dataset[dataset['Is Music'] == 0]
+    positive_samples = dataset[dataset[column] == 1]
+    negative_samples = dataset[dataset[column] == 0]
 
     min_samples = min(len(positive_samples), len(negative_samples))
     balanced_dataset = pd.concat([

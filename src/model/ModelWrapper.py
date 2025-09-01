@@ -34,14 +34,10 @@ class ModelWrapper:
         def preprocess_input(self, title, description, category, duration):
             title = self.text_cleaner.process_text(title)
             description = self.text_cleaner.process_text(description)
-            title = self.title_pipeline[0].encode(title)
-            description = self.description_pipeline[0].encode(description)
-            category = self.category_pipeline[0].encode(category)
+            title = self.title_pipeline.process(title)
+            description = self.description_pipeline.process(description)
+            category = self.category_pipeline.process(category)
             duration = [duration]
-
-            title = self.title_pipeline[1].encode(title)
-            description = self.description_pipeline[1].encode(description)
-            category = self.category_pipeline[1].encode(category)
 
             title = np.array(title).reshape(1, -1).astype(np.float32)
             description = np.array(description).reshape(1, -1).astype(np.float32)

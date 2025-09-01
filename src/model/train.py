@@ -1,3 +1,4 @@
+from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Dense, Input, Dropout, Embedding, GlobalAveragePooling1D
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -7,89 +8,31 @@ import pandas as pd
 from data.text_cleaning import  split_dataset
 from model.ModelWrapper import ModelWrapper
 import logging
+from model.Pipeline import Pipeline
 from vectorizer.VectorizerLabel import VectorizerLabel
 from vectorizer.VectorizerSequential import VectorizerSequential
 from tokenizer.TokenizerWhitespace import TokenizerWhitespace
-from tokenizer.TokenizerNone import TokenizerNone
 
 logger = logging.getLogger("experiment")
 
-def encode_df(dataset, tokenizer, vectorizer):
-    train, val, test = dataset
 
-    tokenizer.train(train)
-    train_token = [tokenizer.encode(x) for x in train]
-    val_token = [tokenizer.encode(x) for x in val]
-    if test is not None:
-        test_token = [tokenizer.encode(x) for x in test]
-
-    vectorizer.train(train_token)
-    train_vectors = vectorizer.encode_batch(train_token)
-    val_vectors = vectorizer.encode_batch(val_token)
-    if test is not None:
-        test_vectors = vectorizer.encode_batch(test_token)
-    else:
-        test_vectors = None
-
-    return train_vectors, val_vectors, test_vectors
-
-def create_model():
-    train_df = pd.read_json('dataset/p2_dataset.json')
-    logger.info(f"Dataset size: {len(train_df)}")
-    
-    final_train_df, final_val_df = split_dataset(train_df)
-    final_val_df, final_test_df = split_dataset(final_val_df, test_size=0.5)
-    logger.debug(f"Train size: {len(final_train_df)}, Val size: {len(final_val_df)}, Test size: {len(final_test_df)}")
-    final_train_df_labels = final_train_df['Is Music'].values.astype(int)
-    final_val_df_labels = final_val_df['Is Music'].values.astype(int)
-    final_test_df_labels = final_test_df['Is Music'].values.astype(int)
-
-    logger.info("Compiling model")
-    title_tokenizer = TokenizerWhitespace()
-    title_vectorizer = VectorizerSequential(8500,20)
-    description_tokenizer = TokenizerWhitespace()
-    description_vectorizer = VectorizerSequential(5000,100)
-    category_tokenizer = TokenizerNone()
-    category_vectorizer = VectorizerLabel()
-    logger.debug(f"Title pipeline: {title_tokenizer}, {title_vectorizer}")
-    logger.debug(f"Description pipeline: {description_tokenizer}, {description_vectorizer}")
-    logger.debug(f"Category pipeline: {category_tokenizer}, {category_vectorizer}")
-
-
-    logger.info("Encoding data")
-
-    train_title_vectors, val_title_vectors, test_title_vectors = encode_df(
-        (final_train_df['Title'], final_val_df['Title'], final_test_df['Title']), title_tokenizer, title_vectorizer)
-    logger.info(f"Title done")
-    logger.debug(f"Title train shape: {train_title_vectors.shape}, val shape: {val_title_vectors.shape}, test shape: {test_title_vectors.shape}")
-    train_desc_vectors, val_desc_vectors, test_desc_vectors = encode_df(
-        (final_train_df['Description'], final_val_df['Description'], final_test_df['Description']), description_tokenizer, description_vectorizer)
-    logger.info(f"Description done")
-    logger.debug(f"Description train shape: {train_desc_vectors.shape}, val shape: {val_desc_vectors.shape}, test shape: {test_desc_vectors.shape}")
-    train_cat_vectors, val_cat_vectors, test_cat_vectors = encode_df(
-        (final_train_df['Categories'], final_val_df['Categories'], final_test_df['Categories']), category_tokenizer, category_vectorizer)
-    logger.info(f"Category done")
-    logger.debug(f"Category train shape: {train_cat_vectors.shape}, val shape: {val_cat_vectors.shape}, test shape: {test_cat_vectors.shape}")
-    train_duration = final_train_df["Duration"].values.astype(int)
-    val_duration = final_val_df["Duration"].values.astype(int)
-    test_duration = final_test_df["Duration"].values.astype(int)
-
-    title_input = Input(shape=(train_title_vectors.shape[1],), name="title_input")
-    title_x = Embedding(input_dim=8500, output_dim=12)(title_input)
+def modell(params):
+    title_input = Input(shape=(params['title_input_dim'],), name="title_input")
+    title_x = Embedding(input_dim=params['title_vocab_size'], output_dim=params['title_embed_dim'])(title_input)
     title_x = GlobalAveragePooling1D()(title_x)
     title_x = Dense(8, activation="elu")(title_x)
     title_x = Dropout(0.2)(title_x)
 
-    desc_input = Input(shape=(train_desc_vectors.shape[1],), name="desc_input")
-    desc_x = Embedding(input_dim=5000, output_dim=16)(desc_input)
+    desc_input = Input(shape=(params['desc_input_dim'],), name="desc_input")
+    desc_x = Embedding(input_dim=params['desc_vocab_size'], output_dim=params['desc_embed_dim'])(desc_input)
     desc_x = GlobalAveragePooling1D()(desc_x)
     desc_x = Dense(64, activation='relu')(desc_x)
     desc_x = Dropout(0.1)(desc_x)
 
-    cat_input = Input(shape=(train_cat_vectors.shape[1],), name="cat_input")
+    cat_input = Input(shape=(params['cat_input_dim'],), name="cat_input")
     cat_x = cat_input
 
-    dur_input = Input(shape=(1,), name="dur_input")
+    dur_input = Input(shape=(params['dur_input_dim'],), name="dur_input")
     dur_x = Dense(8, activation='sigmoid')(dur_input)
     dur_x = Dropout(0.2)(dur_x)
     dur_x = Dense(4, activation='tanh')(dur_x)
@@ -102,8 +45,39 @@ def create_model():
 
     model = Model(inputs=[title_input, desc_input,
                 cat_input, dur_input], outputs=output)
+    return model
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
+def train_and_evaluate(input_frames, pipelines, model_params):
+    dataset = pd.concat(input_frames, ignore_index=True,axis=1)
+    train_df, val_df = split_dataset(dataset, test_size=0.1)
+    val_df, test_df = split_dataset(val_df, test_size=0.5)
+    
+    
+    train_inputs = []
+    val_inputs = []
+    test_inputs = []
+
+    for i in range(len(input_frames)-1):
+        pipeline = pipelines[i]
+        train_input, val_input, test_input = pipeline.train_and_process(train_df[i], val_df[i], test_df[i])
+        train_inputs.append(train_input)
+        val_inputs.append(val_input)
+        test_inputs.append(test_input)
+        logger.info(f"Pipeline {i} done")
+        logger.debug(f"Pipeline {i} train shape: {train_input.shape}, val shape: {val_input.shape}, test shape: {test_input.shape}")
+
+    train_labels = train_df[len(input_frames)-1].values.astype(int)
+    val_labels = val_df[len(input_frames)-1].values.astype(int)
+    test_labels = test_df[len(input_frames)-1].values.astype(int)
+
+    model_params['title_input_dim'] = train_inputs[0].shape[1]
+    model_params['desc_input_dim'] = train_inputs[1].shape[1]
+    model_params['cat_input_dim'] = train_inputs[2].shape[1]
+    model_params['dur_input_dim'] = 1 if len(train_inputs[3].shape) == 1 else train_inputs[3].shape[1]
+
+    model = modell(model_params)
+
+    optimizer = tf.keras.optimizers.Adam()
     model.compile(
         optimizer=optimizer,
         loss='binary_crossentropy',
@@ -112,22 +86,60 @@ def create_model():
     anti_overfit = EarlyStopping(
         monitor='val_loss', patience=40, restore_best_weights=True, mode="min", min_delta=0.001)
     model.fit(
-        [train_title_vectors, train_desc_vectors,
-            train_cat_vectors, train_duration],
-        final_train_df_labels,
+        train_inputs,
+        train_labels,
         epochs=5000,
         batch_size=512,
-        validation_data=([val_title_vectors, val_desc_vectors,
-                        val_cat_vectors, val_duration], final_val_df_labels),
+        validation_data=(val_inputs, val_labels),
         callbacks=[anti_overfit],)
     
     loss, acc = model.evaluate(
-        [test_title_vectors, test_desc_vectors, test_cat_vectors, test_duration], final_test_df_labels, verbose=2)
+        test_inputs, test_labels, verbose=2)
     logger.info(f"Validation accuracy: {acc}, loss: {loss}")
 
-    title_pipeline = (title_tokenizer, title_vectorizer)
-    description_pipeline = (description_tokenizer, description_vectorizer)
-    category_pipeline = (category_tokenizer, category_vectorizer)
+    return model, loss, acc
+        
+
+    
+ 
+
+def create_model():
+    df = pd.read_json('dataset/p2_dataset.json')
+    logger.info(f"Dataset size: {len(df)}")
+
+    logger.info("Compiling model")
+    title_pipeline = Pipeline()
+    title_pipeline.set_tokenizer(TokenizerWhitespace())
+    title_pipeline.set_vectorizer(VectorizerSequential(8500,20))
+    description_pipeline = Pipeline()
+    description_pipeline.set_tokenizer(TokenizerWhitespace())
+    description_pipeline.set_vectorizer(VectorizerSequential(5000,100))
+    category_pipeline = Pipeline()
+    category_pipeline.set_tokenizer(None)
+    category_pipeline.set_vectorizer(VectorizerLabel())
+    category_pipeline.train(df['Categories'])
+    duration_pipeline = Pipeline()
+    duration_pipeline.set_tokenizer(None)
+    duration_pipeline.set_vectorizer(None)
+
+    model_params = {
+        'title_vocab_size': 8500,
+        'title_embed_dim': 20,
+        'desc_vocab_size': 5000,
+        'desc_embed_dim': 30,
+    }
+
+    model, loss, acc = train_and_evaluate([df['Title'], df['Description'], df['Categories'], df['Duration'], df['Is Music']],
+                         [title_pipeline, description_pipeline, category_pipeline,duration_pipeline], model_params)
+
+
+    logger.debug(f"Title pipeline: {title_pipeline}")
+    logger.debug(f"Description pipeline: {description_pipeline}")
+    logger.debug(f"Category pipeline: {category_pipeline}")
+
+
+    logger.info("Encoding data")
+
 
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     tflite_model = converter.convert()

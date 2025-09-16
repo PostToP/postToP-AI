@@ -1,24 +1,25 @@
-from sentence_transformers import SentenceTransformer
 import numpy as np
-from vectorizer.IVectorizer import IVectorizer
+from sentence_transformers import SentenceTransformer
+
+from vectorizer.vectorizer import IVectorizer
+
 
 class VectorizerBert(IVectorizer):
-    def __init__(self):
-        self.vectorizer = SentenceTransformer(
-            'paraphrase-multilingual-MiniLM-L12-v2', device='cpu')
+    def __init__(self) -> None:
+        self.vectorizer = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
         self.output_dim = 384
 
-    def train(self, dataset):
+    def train(self, dataset: list[list[str]]) -> None:
         # BERT models are pre-trained and don't need further training
         pass
 
-    def encode(self, text):
+    def encode(self, text: list[str]) -> np.ndarray:
         if not text or len(text) <= 1:
             return np.zeros(384)
         # The encode method already handles single texts, no need to create a list
         return self.vectorizer.encode(text)
 
-    def encode_batch(self, texts):
+    def encode_batch(self, texts: list[list[str]]) -> np.ndarray:
         # Filter out empty texts
         valid_texts = [text for text in texts if text and len(text) > 1]
 
@@ -40,9 +41,9 @@ class VectorizerBert(IVectorizer):
 
         return result
 
-    def getDict(self):
+    def get_dict(self) -> dict[str, int]:
         voc = self.vectorizer.tokenizer.get_vocab()
         return dict(sorted(voc.items(), key=lambda item: item[1]))
-    
-    def __repr__(self):
+
+    def __repr__(self) -> str:
         return "VectorizerBert"

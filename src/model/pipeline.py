@@ -32,13 +32,13 @@ class Pipeline:
         if self.vectorizer:
             data = self.vectorizer.encode_batch(data)
         return data
-    
+
     def train_and_process(self, train, val=None, test=None):
         self.train(train)
         train_processed = self.process_batch(train)
         val_processed = self.process_batch(val) if val is not None else None
         test_processed = self.process_batch(test) if test is not None else None
         return train_processed, val_processed, test_processed
-    
+
     def __repr__(self):
         return f"Pipeline(tokenizer={self.tokenizer}, vectorizer={self.vectorizer})"

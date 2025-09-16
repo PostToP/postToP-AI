@@ -1,0 +1,14 @@
+[tool.ruff]
+line-length = 120
+fix = true
+select = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint]
+ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107", "G004", "RET504","N806", "S311","PTH123","PLC0415","T201"]
+

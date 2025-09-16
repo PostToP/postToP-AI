@@ -15,6 +15,7 @@ import re
 import pandas as pd
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
+from config.config import custom_contractions, custom_stopwords, custom_keepwords, custom_artist_blocklist
 
 # Download required NLTK resources
 nltk_download('words', quiet=True)
@@ -23,34 +24,12 @@ nltk_download('punkt', quiet=True)
 nltk_download('wordnet', quiet=True)
 
 # Define custom contractions
-contractions.add("feat", "featuring")
-contractions.add("ft", "featuring")
-contractions.add("mv", "music video")
-contractions.add("ost", "original soundtrack")
-contractions.add("yt", "youtube")
-contractions.add("fb", "facebook")
-contractions.add("hq", "high quality")
-contractions.add("q", "quality")
-contractions.add("hd", "high definition")
-contractions.add("bpm", "beats per minute")
-contractions.add("p", "producer")
-contractions.add("prod", "producer")
-contractions.add("vo", "vocalist")
+for key, value in custom_contractions.items():
+    contractions.add(key, value)
 
 # Define stop words
 stop_words = set(stopwords.words('english'))
-additional_stopwords = [
-    "youtube", "video", "discord", "link", "about", "follow", "subscribe",
-    "twitter", "like", "channel", "twitch", "instagram", "tiktok", "social"
-]
-stop_words.update(additional_stopwords)
-
-# Define useful words for artist name filtering
-useful_words = ["music", "production", "nightcore", "records", "band", "dj", "feat", "p", "utau", "asmr", "vevo", "english", "lofi", "meme", "vlog", "vod", "vods", "feat", "studio", "asmr", "english",
-                "online", "playlist", "google", "pc", "software", "programming", "mp3", "cd", "dj", "lofi", "linux", "internet", "genshin", "vods", "vod", "3d", "p", "vtuber", "uploading", "demo", "ch", "lil", "tv"]
-
-artists = ["ado", "eve", "utsu"]
-
+stop_words.update(custom_stopwords)
 
 class TextPreprocessor:
     """Text preprocessing utilities
@@ -265,7 +244,7 @@ class TextPreprocessor:
                 if not is_english_word(w):
                     filtered_artist_names.add(w)
 
-        filtered_artist_names = filtered_artist_names - set(useful_words)
+        filtered_artist_names = filtered_artist_names - set(custom_keepwords)
         filtered_artist_names.update(artists)
         filtered_artist_names.discard("")
         return filtered_artist_names

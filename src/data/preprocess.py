@@ -1,6 +1,7 @@
 import pandas as pd
+from sklearn.compose import ColumnTransformer
 
-from data.text_cleaning import DatasetPreprocessor, generate_train_preprocess_pipeline
+from data.text_cleaning import DatasetPreprocessor, generate_new_pipeline
 
 
 def preprocess_dataset() -> pd.DataFrame:
@@ -13,12 +14,17 @@ def preprocess_dataset() -> pd.DataFrame:
     dataset["Description"] = dataset["Description"].fillna("")
 
     # Process text columns
-    text_columns = ["Title", "Description"]
-    train_preprocessor = generate_train_preprocess_pipeline(dataset)
-    train_df = train_preprocessor.process_text_columns_multiprocessing(
-        dataset,
-        text_columns,
+    column_names = dataset.columns.tolist()
+    text_pipeline = generate_new_pipeline()
+    tranformer = ColumnTransformer(
+        [
+            ("title", text_pipeline, "Title"),
+            ("description", text_pipeline, "Description"),
+        ],
+        remainder="passthrough",
     )
+    train_df = tranformer.fit_transform(dataset)
+    train_df = pd.DataFrame(train_df, columns=column_names)
     train_df = DatasetPreprocessor.remove_similar_rows(train_df)
 
     train_df.to_json("dataset/p2_dataset.json", index=False)

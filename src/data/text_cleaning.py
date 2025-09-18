@@ -15,6 +15,7 @@ from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import FunctionTransformer, Pipeline
 from tldextract import extract
 from tqdm import tqdm
 from unidecode import unidecode
@@ -405,93 +406,6 @@ class TextPreprocessor:
 
 
 class DatasetPreprocessor:
-    def __init__(self) -> None:
-        self.preprocessing_steps = []
-
-    def add_step(self, func: Callable) -> "DatasetPreprocessor":
-        """Add a preprocessing step to the pipeline."""
-        self.preprocessing_steps.append(func)
-        return self
-        return self
-
-    def process_text_columns(
-        self,
-        df: pd.DataFrame,
-        columns: list[str],
-        verbose: bool = False,
-    ) -> pd.DataFrame:
-        """Apply all preprocessing steps to specified text columns with progress tracking."""
-        df_copy = df.copy()
-
-        for i, func in enumerate(self.preprocessing_steps):
-            step_name = getattr(func, "__name__", f"Step {i + 1}")
-
-            for col in columns:
-                if verbose:
-                    df_copy[col] = [func(text) for text in tqdm(df_copy[col], desc=f"{step_name} - {col}")]
-                else:
-                    df_copy[col] = df_copy[col].apply(func)
-
-        return df_copy
-
-    def process_text_columns_multiprocessing(
-        self,
-        df: pd.DataFrame,
-        columns: list[str],
-        n_jobs: int = -1,
-    ) -> pd.DataFrame:
-        """Apply all preprocessing steps to specified text columns using multiprocessing.
-
-        Args:
-            df (pd.DataFrame): Input dataframe
-            columns (list): List of column names to process
-            n_jobs (int): Number of processes to use, -1 for all available
-
-        Returns:
-            pd.DataFrame: Processed dataframe
-
-        """
-        if n_jobs <= 0:
-            n_jobs = multiprocessing.cpu_count()
-
-        df_copy = df.copy()
-
-        for col in columns:
-            n_rows = len(df_copy)
-            chunk_size = n_rows // n_jobs
-            chunks = []
-
-            for i in range(n_jobs):
-                start_idx = i * chunk_size
-                end_idx = n_rows if i == n_jobs - 1 else (i + 1) * chunk_size
-                chunks.append(df_copy[col].iloc[start_idx:end_idx].tolist())
-
-            # Process chunks in parallel
-            with multiprocessing.Pool(processes=n_jobs) as pool:
-                results = pool.starmap(
-                    self._process_chunk,
-                    [(chunk,) for chunk in chunks],
-                )
-
-            # Combine results
-            processed_col = []
-            for chunk_result in results:
-                processed_col.extend(chunk_result)
-
-            df_copy[col] = processed_col
-
-        return df_copy
-
-    def _process_chunk(self, chunk: list[str]) -> list[str]:
-        """Process a chunk of texts."""
-        return [self.process_text(text) for text in chunk]
-
-    def process_text(self, text: str) -> str:
-        """Apply all preprocessing steps to a single text."""
-        for func in self.preprocessing_steps:
-            text = func(text)
-        return text
-
     @staticmethod
     def remove_similar_rows(df: pd.DataFrame, threshold: float = 0.9) -> pd.DataFrame:
         """Remove rows with similar content based on TF-IDF similarity."""
@@ -516,73 +430,31 @@ class DatasetPreprocessor:
         return new_df
 
 
-def generate_train_preprocess_pipeline(train_df: pd.DataFrame) -> DatasetPreprocessor:
-    """Generate a preprocessing pipeline for the training set.
+def generate_new_pipeline() -> Pipeline:
+    def wrapper(func: Callable) -> Callable:
+        return FunctionTransformer(lambda x: x.apply(func), validate=False)
 
-    Args:
-        train_df (pd.DataFrame): Training dataset
-
-    Returns:
-        DatasetPreprocessor: Preprocessing pipeline for the training set
-
-    """
-    filtered_artist_names = TextPreprocessor.get_artist_names(
-        train_df["Description"].tolist(),
-        train_df["Channel Name"].tolist(),
+    pipe = Pipeline(
+        [
+            ("remove_escaped_characters", wrapper(TextPreprocessor.remove_escaped_characters)),
+            ("normalize_text_to_ascii", wrapper(TextPreprocessor.normalize_text_to_ascii)),
+            ("replace_links_with_sld", wrapper(TextPreprocessor.replace_links_with_sld)),
+            ("remove_emails", wrapper(TextPreprocessor.remove_emails)),
+            ("remove_ats", wrapper(TextPreprocessor.remove_ats)),
+            # todo: remove artist names, maybe
+            ("to_lower", wrapper(TextPreprocessor.to_lower)),
+            ("expand_contractions", wrapper(TextPreprocessor.expand_contractions)),
+            ("remove_hyphen", wrapper(TextPreprocessor.remove_hyphen)),
+            ("remove_special_characters", wrapper(TextPreprocessor.remove_special_characters)),
+            ("collapse_whitespaces", wrapper(TextPreprocessor.collapse_whitespaces)),
+            ("lemmatize_text", wrapper(TextPreprocessor.lemmatize_text)),
+            ("remove_stopwords", wrapper(TextPreprocessor.remove_stopwords)),
+            ("remove_consecutive_duplicates", wrapper(TextPreprocessor.remove_consecutive_duplicates)),
+            ("to_lower2", wrapper(TextPreprocessor.to_lower)),
+            ("convert_to_dataframe", FunctionTransformer(lambda x: pd.DataFrame(x))),
+        ],
     )
-    preprocessor = DatasetPreprocessor()
-
-    # Add preprocessing steps in sequence
-    preprocessor.add_step(TextPreprocessor.remove_escaped_characters)
-    preprocessor.add_step(TextPreprocessor.normalize_text_to_ascii)
-    preprocessor.add_step(TextPreprocessor.replace_links_with_sld)
-    preprocessor.add_step(TextPreprocessor.remove_emails)
-    preprocessor.add_step(TextPreprocessor.remove_ats)
-    preprocessor.add_step(
-        partial(
-            TextPreprocessor.remove_wordpairs,
-            filtered_artist_names=filtered_artist_names,
-        ),
-    )
-    preprocessor.add_step(TextPreprocessor.to_lower)
-    preprocessor.add_step(TextPreprocessor.expand_contractions)
-    preprocessor.add_step(TextPreprocessor.remove_hyphen)
-    preprocessor.add_step(TextPreprocessor.remove_special_characters)
-    preprocessor.add_step(TextPreprocessor.collapse_whitespaces)
-    preprocessor.add_step(TextPreprocessor.lemmatize_text)
-    preprocessor.add_step(TextPreprocessor.remove_stopwords)
-    preprocessor.add_step(TextPreprocessor.remove_consecutive_duplicates)
-    preprocessor.add_step(TextPreprocessor.to_lower)
-
-    return preprocessor
-
-
-def generate_test_preprocess_pipeline() -> DatasetPreprocessor:
-    """Generate a preprocessing pipeline for the test set.
-
-    Returns:
-        DatasetPreprocessor: Preprocessing pipeline for the test set
-
-    """
-    preprocessor = DatasetPreprocessor()
-
-    # Add preprocessing steps in sequence
-    preprocessor.add_step(TextPreprocessor.remove_escaped_characters)
-    preprocessor.add_step(TextPreprocessor.normalize_text_to_ascii)
-    preprocessor.add_step(TextPreprocessor.replace_links_with_sld)
-    preprocessor.add_step(TextPreprocessor.remove_emails)
-    preprocessor.add_step(TextPreprocessor.remove_ats)
-    preprocessor.add_step(TextPreprocessor.to_lower)
-    preprocessor.add_step(TextPreprocessor.expand_contractions)
-    preprocessor.add_step(TextPreprocessor.remove_hyphen)
-    preprocessor.add_step(TextPreprocessor.remove_special_characters)
-    preprocessor.add_step(TextPreprocessor.collapse_whitespaces)
-    preprocessor.add_step(TextPreprocessor.lemmatize_text)
-    preprocessor.add_step(TextPreprocessor.remove_stopwords)
-    preprocessor.add_step(TextPreprocessor.remove_consecutive_duplicates)
-    preprocessor.add_step(TextPreprocessor.to_lower)
-
-    return preprocessor
+    return pipe
 
 
 def split_dataset(

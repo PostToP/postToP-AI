@@ -1,6 +1,7 @@
 import logging
 
 import pandas as pd
+from sklearn.pipeline import FunctionTransformer, Pipeline
 import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.keras.callbacks import EarlyStopping
@@ -12,10 +13,8 @@ from tensorflow.keras.layers import (
     Input,
 )
 from tensorflow.keras.models import Model
-
 from data.text_cleaning import split_dataset
 from model.model_wrapper import ModelWrapper
-from model.pipeline import Pipeline
 from tokenizer.tokenizer_whitespace import TokenizerWhitespace
 from vectorizer.vectorizer_label import VectorizerLabel
 from vectorizer.vectorizer_sequential import VectorizerSequential
@@ -69,7 +68,10 @@ def train_and_evaluate(
 
     for i in range(len(input_frames) - 1):
         pipeline = pipelines[i]
-        train_input, val_input, test_input = pipeline.train_and_process(train_df[i], val_df[i], test_df[i])
+        train_input = pipeline.fit_transform(train_df[i], train_df[len(input_frames) - 1])
+        val_input = pipeline.transform(val_df[i])
+        test_input = pipeline.transform(test_df[i])
+
         train_inputs.append(train_input)
         val_inputs.append(val_input)
         test_inputs.append(test_input)
@@ -122,19 +124,24 @@ def create_model() -> None:
     logger.info(f"Dataset size: {len(df)}")
 
     logger.info("Compiling model")
-    title_pipeline = Pipeline()
-    title_pipeline.set_tokenizer(TokenizerWhitespace())
-    title_pipeline.set_vectorizer(VectorizerSequential(8500, 20))
-    description_pipeline = Pipeline()
-    description_pipeline.set_tokenizer(TokenizerWhitespace())
-    description_pipeline.set_vectorizer(VectorizerSequential(5000, 100))
-    category_pipeline = Pipeline()
-    category_pipeline.set_tokenizer(None)
-    category_pipeline.set_vectorizer(VectorizerLabel())
-    category_pipeline.train(df["Categories"])
-    duration_pipeline = Pipeline()
-    duration_pipeline.set_tokenizer(None)
-    duration_pipeline.set_vectorizer(None)
+    title_pipeline = Pipeline(
+        [
+            ("tokenizer", TokenizerWhitespace()),
+            ("vectorizer", VectorizerSequential(8500, 20)),
+        ],
+    )
+    description_pipeline = Pipeline(
+        [
+            ("tokenizer", TokenizerWhitespace()),
+            ("vectorizer", VectorizerSequential(5000, 30)),
+        ],
+    )
+    category_pipeline = Pipeline(
+        [
+            ("vectorizer", VectorizerLabel()),
+        ],
+    )
+    duration_pipeline = Pipeline([("nothing", FunctionTransformer(lambda x: x))])
 
     model_params = {
         "title_vocab_size": 8500,

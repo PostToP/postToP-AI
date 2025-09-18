@@ -1,9 +1,10 @@
 import dill
 import numpy as np
 from ai_edge_litert.interpreter import Interpreter
-
-from data.text_cleaning import generate_test_preprocess_pipeline
-from model.pipeline import Pipeline
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from data.text_cleaning import generate_new_pipeline
 
 
 class ModelWrapper:
@@ -16,7 +17,7 @@ class ModelWrapper:
         self.title_pipeline = title_pipeline
         self.description_pipeline = description_pipeline
         self.category_pipeline = category_pipeline
-        self.text_cleaner = generate_test_preprocess_pipeline()
+        self.text_cleaner = generate_new_pipeline()
 
     def save_model(self, model: bytes, model_loc: str) -> None:
         with open(model_loc, "wb") as f:
@@ -45,11 +46,25 @@ class ModelWrapper:
         category: list,
         duration: list,
     ) -> tuple:
-        title = self.text_cleaner.process_text(title)
-        description = self.text_cleaner.process_text(description)
-        title = self.title_pipeline.process(title)
-        description = self.description_pipeline.process(description)
-        category = self.category_pipeline.process(category)
+        temp_df = pd.DataFrame(
+            {
+                "Title": [title],
+                "Description": [description],
+            },
+        )
+        trans = ColumnTransformer(
+            [
+                ("title", self.text_cleaner, "Title"),
+                ("description", self.text_cleaner, "Description"),
+            ],
+            remainder="drop",
+        )
+        temp = trans.fit_transform(temp_df)
+        title = temp[0][0]
+        description = temp[0][1]
+        title = self.title_pipeline.transform([title])
+        description = self.description_pipeline.transform([description])
+        category = self.category_pipeline.transform([category])
         duration = [duration]
 
         title = np.array(title).reshape(1, -1).astype(np.float32)

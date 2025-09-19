@@ -22,6 +22,10 @@ def main() -> None:
         from model.train import create_model
 
         create_model()
+    elif command == "optuna":
+        from model.optuna import main as optuna_main
+
+        optuna_main()
     else:
         print(f"Unknown command: {command}")
         return

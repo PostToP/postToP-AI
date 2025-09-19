@@ -1,10 +1,10 @@
 import logging
 
 import pandas as pd
-from sklearn.pipeline import FunctionTransformer, Pipeline
 import tensorflow as tf
-from tensorflow.keras import layers
-from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.pipeline import FunctionTransformer, Pipeline
+from tensorflow.keras import layers, regularizers
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.layers import (
     Dense,
     Dropout,
@@ -13,6 +13,7 @@ from tensorflow.keras.layers import (
     Input,
 )
 from tensorflow.keras.models import Model
+
 from data.text_cleaning import split_dataset
 from model.model_wrapper import ModelWrapper
 from tokenizer.tokenizer_whitespace import TokenizerWhitespace
@@ -26,22 +27,22 @@ def modell(params: dict) -> Model:
     title_input = Input(shape=(params["title_input_dim"],), name="title_input")
     title_x = Embedding(input_dim=params["title_vocab_size"], output_dim=params["title_embed_dim"])(title_input)
     title_x = GlobalAveragePooling1D()(title_x)
-    title_x = Dense(8, activation="elu")(title_x)
+    title_x = Dense(8, activation="elu", kernel_regularizer=regularizers.l2(1e-5))(title_x)
     title_x = Dropout(0.2)(title_x)
 
     desc_input = Input(shape=(params["desc_input_dim"],), name="desc_input")
     desc_x = Embedding(input_dim=params["desc_vocab_size"], output_dim=params["desc_embed_dim"])(desc_input)
     desc_x = GlobalAveragePooling1D()(desc_x)
-    desc_x = Dense(64, activation="relu")(desc_x)
+    desc_x = Dense(64, activation="relu", kernel_regularizer=regularizers.l2(1e-5))(desc_x)
     desc_x = Dropout(0.1)(desc_x)
 
     cat_input = Input(shape=(params["cat_input_dim"],), name="cat_input")
     cat_x = cat_input
 
     dur_input = Input(shape=(params["dur_input_dim"],), name="dur_input")
-    dur_x = Dense(8, activation="sigmoid")(dur_input)
+    dur_x = Dense(8, activation="sigmoid", kernel_regularizer=regularizers.l2(1e-5))(dur_input)
     dur_x = Dropout(0.2)(dur_x)
-    dur_x = Dense(4, activation="tanh")(dur_x)
+    dur_x = Dense(4, activation="tanh", kernel_regularizer=regularizers.l2(1e-5))(dur_x)
     dur_x = Dropout(0.3)(dur_x)
 
     combined = layers.concatenate([title_x, desc_x, cat_x, dur_x])
@@ -68,7 +69,7 @@ def train_and_evaluate(
 
     for i in range(len(input_frames) - 1):
         pipeline = pipelines[i]
-        train_input = pipeline.fit_transform(train_df[i], train_df[len(input_frames) - 1])
+        train_input = pipeline.fit_transform(train_df[i])
         val_input = pipeline.transform(val_df[i])
         test_input = pipeline.transform(test_df[i])
 
@@ -91,26 +92,38 @@ def train_and_evaluate(
 
     model = modell(model_params)
 
-    optimizer = tf.keras.optimizers.Adam()
+    optimizer = tf.keras.optimizers.AdamW(
+        learning_rate=1e-3,
+        weight_decay=1e-5,
+        clipnorm=1.0,
+    )
     model.compile(
         optimizer=optimizer,
         loss="binary_crossentropy",
         metrics=["accuracy"],
     )
+    reduce_lr = ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=0.5,
+        patience=10,
+        min_lr=1e-6,
+        verbose=1,
+    )
     anti_overfit = EarlyStopping(
         monitor="val_loss",
-        patience=40,
+        patience=20,
         restore_best_weights=True,
         mode="min",
-        min_delta=0.001,
+        min_delta=0.0001,
     )
     model.fit(
         train_inputs,
         train_labels,
         epochs=5000,
-        batch_size=512,
+        batch_size=1024,
         validation_data=(val_inputs, val_labels),
-        callbacks=[anti_overfit],
+        callbacks=[anti_overfit, reduce_lr],
+        shuffle=True,
     )
 
     loss, acc = model.evaluate(test_inputs, test_labels, verbose=2)

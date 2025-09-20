@@ -4,10 +4,10 @@ import optuna
 import pandas as pd
 import tensorflow as tf
 from sklearn.pipeline import FunctionTransformer, Pipeline
-from tensorflow.keras import Input, Model, layers, regularizers
 from tensorflow.keras.callbacks import EarlyStopping
 
 from data.text_cleaning import split_dataset
+from model.train import build_model
 from tokenizer.tokenizer_whitespace import TokenizerWhitespace
 from vectorizer.vectorizer_label import VectorizerLabel
 from vectorizer.vectorizer_sequential import VectorizerSequential
@@ -33,48 +33,6 @@ def generate_hyperparameters(trial: optuna.Trial) -> dict:
             params[f"{path}_dropout_{i}"] = trial.suggest_float(f"{path}_dropout_{i}", 0.0, 0.5)
 
     return params
-
-
-def build_model(params: dict) -> Model:
-    inputs = []
-    valami = []
-    paths = ["title", "desc", "cat", "dur"]
-
-    for path in paths:
-        inputs.append(Input(shape=(params[f"{path}_input_dim"],), name=f"{path}_input"))
-        x = inputs[-1]
-        if f"{path}_embed_dim" in params:
-            x = layers.Embedding(
-                input_dim=params[f"{path}_vocab_size"],
-                output_dim=params[f"{path}_embed_dim"],
-            )(inputs[-1])
-            x = layers.GlobalAveragePooling1D()(x)
-        n_layers = params[f"n_{path}_layers"]
-        for i in range(n_layers):
-            x = layers.Dense(
-                params[f"{path}_units_{i}"],
-                activation=params[f"{path}_activation_{i}"],
-                kernel_regularizer=regularizers.l2(params[f"{path}_l2_{i}"]),
-            )(x)
-            x = layers.Dropout(params[f"{path}_dropout_{i}"])(x)
-        valami.append(x)
-
-    combined = layers.concatenate(valami)
-    x = combined
-
-    # --- Post-processing layers ---
-    n_post_layers = params["n_post_layers"]
-    for i in range(n_post_layers):
-        x = layers.Dense(
-            params[f"post_units_{i}"],
-            activation=params[f"post_activation_{i}"],
-            kernel_regularizer=regularizers.l2(params[f"post_l2_{i}"]),
-        )(x)
-        x = layers.Dropout(params[f"post_dropout_{i}"])(x)
-
-    output = layers.Dense(1, activation="sigmoid")(x)
-    model = Model(inputs=inputs, outputs=output)
-    return model
 
 
 # yank idc

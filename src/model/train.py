@@ -1,5 +1,6 @@
 import logging
 
+import optuna
 import pandas as pd
 import tensorflow as tf
 from sklearn.pipeline import FunctionTransformer, Pipeline
@@ -23,34 +24,45 @@ from vectorizer.vectorizer_sequential import VectorizerSequential
 logger = logging.getLogger("experiment")
 
 
-def modell(params: dict) -> Model:
-    title_input = Input(shape=(params["title_input_dim"],), name="title_input")
-    title_x = Embedding(input_dim=params["title_vocab_size"], output_dim=params["title_embed_dim"])(title_input)
-    title_x = GlobalAveragePooling1D()(title_x)
-    title_x = Dense(8, activation="elu", kernel_regularizer=regularizers.l2(1e-5))(title_x)
-    title_x = Dropout(0.2)(title_x)
+def build_model(params: dict) -> Model:
+    inputs = []
+    valami = []
+    paths = ["title", "desc", "cat", "dur"]
 
-    desc_input = Input(shape=(params["desc_input_dim"],), name="desc_input")
-    desc_x = Embedding(input_dim=params["desc_vocab_size"], output_dim=params["desc_embed_dim"])(desc_input)
-    desc_x = GlobalAveragePooling1D()(desc_x)
-    desc_x = Dense(64, activation="relu", kernel_regularizer=regularizers.l2(1e-5))(desc_x)
-    desc_x = Dropout(0.1)(desc_x)
+    for path in paths:
+        inputs.append(Input(shape=(params[f"{path}_input_dim"],), name=f"{path}_input"))
+        x = inputs[-1]
+        if f"{path}_embed_dim" in params:
+            x = layers.Embedding(
+                input_dim=params[f"{path}_vocab_size"],
+                output_dim=2 ** params[f"{path}_embed_dim"],
+            )(inputs[-1])
+            x = layers.GlobalAveragePooling1D()(x)
+        n_layers = params[f"n_{path}_layers"]
+        for i in range(n_layers):
+            x = layers.Dense(
+                2 ** params[f"{path}_units_{i}"],
+                activation=params[f"{path}_activation_{i}"],
+                kernel_regularizer=regularizers.l2(params[f"{path}_l2_{i}"]),
+            )(x)
+            x = layers.Dropout(params[f"{path}_dropout_{i}"])(x)
+        valami.append(x)
 
-    cat_input = Input(shape=(params["cat_input_dim"],), name="cat_input")
-    cat_x = cat_input
-
-    dur_input = Input(shape=(params["dur_input_dim"],), name="dur_input")
-    dur_x = Dense(8, activation="sigmoid", kernel_regularizer=regularizers.l2(1e-5))(dur_input)
-    dur_x = Dropout(0.2)(dur_x)
-    dur_x = Dense(4, activation="tanh", kernel_regularizer=regularizers.l2(1e-5))(dur_x)
-    dur_x = Dropout(0.3)(dur_x)
-
-    combined = layers.concatenate([title_x, desc_x, cat_x, dur_x])
+    combined = layers.concatenate(valami)
     x = combined
 
-    output = layers.Dense(1, activation="sigmoid")(x)
+    # --- Post-processing layers ---
+    n_post_layers = params["n_post_layers"]
+    for i in range(n_post_layers):
+        x = layers.Dense(
+            params[f"post_units_{i}"],
+            activation=params[f"post_activation_{i}"],
+            kernel_regularizer=regularizers.l2(params[f"post_l2_{i}"]),
+        )(x)
+        x = layers.Dropout(params[f"post_dropout_{i}"])(x)
 
-    model = Model(inputs=[title_input, desc_input, cat_input, dur_input], outputs=output)
+    output = layers.Dense(1, activation="sigmoid")(x)
+    model = Model(inputs=inputs, outputs=output)
     return model
 
 
@@ -90,7 +102,7 @@ def train_and_evaluate(
     model_params["cat_input_dim"] = train_inputs[2].shape[1]
     model_params["dur_input_dim"] = 1 if len(train_inputs[3].shape) == 1 else train_inputs[3].shape[1]
 
-    model = modell(model_params)
+    model = build_model(model_params)
 
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=1e-3,
@@ -162,6 +174,17 @@ def create_model() -> None:
         "desc_vocab_size": 5000,
         "desc_embed_dim": 30,
     }
+
+    storage_name = "sqlite:///optuna_study.db"
+    study = optuna.create_study(
+        study_name="hypeparam_tuning",
+        directions=["minimize", "maximize"],
+        storage=storage_name,
+        load_if_exists=True,
+    )
+
+    best_params = study.best_trials[0].params
+    model_params.update(best_params)
 
     model, _loss, _acc = train_and_evaluate(
         [df["Title"], df["Description"], df["Categories"], df["Duration"], df["Is Music"]],

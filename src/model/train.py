@@ -17,6 +17,7 @@ from tensorflow.keras.models import Model
 
 from data.text_cleaning import split_dataset
 from model.model_wrapper import ModelWrapper
+from vectorizer.vectorizer_bucket import VectorizerBucket
 from tokenizer.tokenizer_whitespace import TokenizerWhitespace
 from vectorizer.vectorizer_label import VectorizerLabel
 from vectorizer.vectorizer_sequential import VectorizerSequential
@@ -166,13 +167,18 @@ def create_model() -> None:
             ("vectorizer", VectorizerLabel()),
         ],
     )
-    duration_pipeline = Pipeline([("nothing", FunctionTransformer(lambda x: x))])
+    duration_pipeline = Pipeline(
+        [
+            ("nothing2", VectorizerBucket([0, 60, 180, 360, 9999999])),
+        ]
+    )
 
     model_params = {
         "title_vocab_size": 8500,
         "title_embed_dim": 20,
         "desc_vocab_size": 5000,
         "desc_embed_dim": 30,
+        "dur_vocab_size": 4,
     }
 
     storage_name = "sqlite:///optuna_study.db"

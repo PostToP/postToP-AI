@@ -3,32 +3,53 @@ import sys
 import log
 
 
+def run_fetch() -> None:
+    from data.database import main as fetch_videos
+
+    fetch_videos()
+
+
+def run_preprocess() -> None:
+    from data.preprocess import preprocess_dataset
+
+    preprocess_dataset()
+
+
+def run_train() -> None:
+    from model.train import create_model
+
+    create_model()
+
+
+def run_optuna() -> None:
+    from model.optuna import main as optuna_main
+
+    optuna_main()
+
+
 def main() -> None:
+    COMMANDS = {
+        "fetch": run_fetch,
+        "preprocess": run_preprocess,
+        "train": run_train,
+        "optuna": run_optuna,
+    }
+
     if len(sys.argv) < 2:
-        print("Usage: python cli.py <command>")
+        print("Usage: python cli.py <operations>")
+        print(f"Available operations: {', '.join(COMMANDS.keys())}")
         return
 
-    command = sys.argv[1]
+    commands = sys.argv[1:]
 
-    if command == "fetch":
-        from data.database import main as fetch_videos
+    for i in commands:
+        if i not in COMMANDS:
+            print(f"Unknown command: {i}")
+            return
 
-        fetch_videos()
-    elif command == "preprocess":
-        from data.preprocess import preprocess_dataset
-
-        preprocess_dataset()
-    elif command == "train":
-        from model.train import create_model
-
-        create_model()
-    elif command == "optuna":
-        from model.optuna import main as optuna_main
-
-        optuna_main()
-    else:
-        print(f"Unknown command: {command}")
-        return
+    while commands:
+        command = commands.pop(0)
+        COMMANDS[command]()
 
 
 if __name__ == "__main__":

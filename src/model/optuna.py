@@ -15,8 +15,8 @@ from vectorizer.vectorizer_sequential import VectorizerSequential
 
 def generate_hyperparameters(trial: optuna.Trial) -> dict:
     params = {
-        "title_embed_dim": 2 ** trial.suggest_int("title_embed_dim", 3, 6),
-        "desc_embed_dim": 2 ** trial.suggest_int("desc_embed_dim", 4, 7),
+        "title_embed_dim": trial.suggest_int("title_embed_dim", 3, 6),
+        "desc_embed_dim": trial.suggest_int("desc_embed_dim", 4, 7),
         "learning_rate": 2e-4,
     }
     paths = ["title", "desc", "cat", "dur", "post"]
@@ -24,7 +24,7 @@ def generate_hyperparameters(trial: optuna.Trial) -> dict:
         n_layers = trial.suggest_int(f"n_{path}_layers", 0, 3)
         params[f"n_{path}_layers"] = n_layers
         for i in range(n_layers):
-            params[f"{path}_units_{i}"] = 2 ** trial.suggest_int(f"{path}_units_{i}", 3, 8)
+            params[f"{path}_units_{i}"] = trial.suggest_int(f"{path}_units_{i}", 3, 8)
             params[f"{path}_activation_{i}"] = trial.suggest_categorical(
                 f"{path}_activation_{i}",
                 ["relu", "elu", "gelu", "tanh", "sigmoid"],

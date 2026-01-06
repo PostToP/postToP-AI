@@ -1,5 +1,6 @@
 import logging
 
+import numpy as np
 import optuna
 import pandas as pd
 import tensorflow as tf
@@ -145,6 +146,48 @@ def train_and_evaluate(
     return model, loss, acc
 
 
+def flag_suspicious_rows(
+    model: Model,
+    dataset: object,
+    pipelines: list,
+) -> pd.DataFrame:
+    input_rows = ["Title", "Description", "Categories", "Duration"]
+    input_frames = []
+    for i in range(len(input_rows)):
+        pipeline = pipelines[i]
+        input_frame = pipeline.transform(dataset[input_rows[i]])
+        input_frames.append(input_frame)
+    train_labels = dataset["Is Music"].to_numpy(dtype=int)
+    train_inputs = input_frames
+
+    train_preds = model.predict(train_inputs, batch_size=1024).flatten()
+    train_labels_array = train_labels.astype(np.float32).flatten()
+
+    epsilon = 1e-7
+    train_preds_clipped = np.clip(train_preds, epsilon, 1 - epsilon)
+    train_loss = -(
+        train_labels_array * np.log(train_preds_clipped) + (1 - train_labels_array) * np.log(1 - train_preds_clipped)
+    )
+
+    confidence = np.abs(train_preds - 0.5) * 2
+    pred_label = (train_preds > 0.5).astype(int)
+
+    disagree = pred_label != train_labels_array
+    loss_thresh = np.percentile(train_loss, 90)
+
+    suspect_mask = (train_loss > loss_thresh) & (confidence > 0.8) & disagree
+    suspect_row_ids = np.where(suspect_mask)[0]
+    logger.warning(f"Flagged {len(suspect_row_ids)} suspicious rows")
+    suspect_rows = dataset.iloc[suspect_row_ids]
+    suspect_rows["Predicted Probability"] = train_preds[suspect_row_ids]
+    suspect_rows["Predicted Label"] = pred_label[suspect_row_ids]
+
+    suspect_rows = suspect_rows.assign(Loss=train_loss[suspect_row_ids])
+    suspect_rows = suspect_rows.sort_values(by="Loss", ascending=False)
+
+    suspect_rows.to_csv("model/suspect_rows.csv", index=False)
+
+
 def create_model() -> None:
     df = pd.read_json("dataset/p2_dataset.json")
     logger.info(f"Dataset size: {len(df)}")
@@ -197,6 +240,8 @@ def create_model() -> None:
         [title_pipeline, description_pipeline, category_pipeline, duration_pipeline],
         model_params,
     )
+
+    flag_suspicious_rows(model, df, [title_pipeline, description_pipeline, category_pipeline, duration_pipeline])
 
     logger.debug(f"Title pipeline: {title_pipeline}")
     logger.debug(f"Description pipeline: {description_pipeline}")

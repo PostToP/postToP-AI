@@ -453,6 +453,7 @@ def generate_new_pipeline() -> Pipeline:
             ("to_lower2", wrapper(TextPreprocessor.to_lower)),
             ("convert_to_dataframe", FunctionTransformer(lambda x: pd.DataFrame(x))),
         ],
+        verbose=True,
     )
     return pipe
 

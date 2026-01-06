@@ -1,7 +1,14 @@
+import logging
+
 import pandas as pd
+from dotenv import load_dotenv
 from sklearn.compose import ColumnTransformer
 
 from data.text_cleaning import DatasetPreprocessor, generate_new_pipeline
+
+load_dotenv()
+
+logger = logging.getLogger("experiment")
 
 
 def preprocess_dataset() -> pd.DataFrame:
@@ -16,18 +23,22 @@ def preprocess_dataset() -> pd.DataFrame:
     # Process text columns
     column_names = dataset.columns.tolist()
     text_pipeline = generate_new_pipeline()
-    tranformer = ColumnTransformer(
+    transformer = ColumnTransformer(
         [
             ("yt_id", "passthrough", ["YT ID"]),
             ("title", text_pipeline, "Title"),
             ("description", text_pipeline, "Description"),
         ],
         remainder="passthrough",
+        verbose=True,
     )
-    train_df = tranformer.fit_transform(dataset)
-    train_df = pd.DataFrame(train_df, columns=column_names)
-    train_df = DatasetPreprocessor.remove_similar_rows(train_df)
+    processed_dataset = transformer.fit_transform(dataset)
+    processed_dataset = pd.DataFrame(processed_dataset, columns=column_names)
+    len_before = len(processed_dataset)
+    processed_dataset = DatasetPreprocessor.remove_similar_rows(processed_dataset)
+    len_after = len(processed_dataset)
+    logger.info(f"Removed {len_before - len_after} similar rows.")
 
-    train_df.to_json("dataset/p2_dataset.json", index=False)
+    processed_dataset.to_json("dataset/p2_dataset.json", index=False)
 
-    return train_df
+    return processed_dataset

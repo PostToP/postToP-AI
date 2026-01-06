@@ -24,6 +24,7 @@ def fetch_videos() -> list[tuple]:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""SELECT
+    v.yt_id,
     title,
     description,
     name as channel_name,
@@ -55,14 +56,15 @@ def convert_postgres_videos_to_json(videos: list[tuple]) -> list[dict]:
     all_vids = []
     for video in videos:
         v = {}
-        v["Title"] = video[0]
-        v["Description"] = video[1]
-        v["Channel Name"] = video[2]
-        v["Duration"] = video[3]
-        v["Language"] = video[4]
-        v["Category"] = video[5]
-        v["Categories"] = video[6] if video[6] else []
-        v["Is Music"] = video[7]
+        v["YT ID"] = video[0]
+        v["Title"] = video[1]
+        v["Description"] = video[2]
+        v["Channel Name"] = video[3]
+        v["Duration"] = video[4]
+        v["Language"] = video[5]
+        v["Category"] = video[6]
+        v["Categories"] = video[7] if video[7] else []
+        v["Is Music"] = video[8]
         all_vids.append(v)
     return all_vids
 

@@ -18,6 +18,7 @@ def preprocess_dataset() -> pd.DataFrame:
     text_pipeline = generate_new_pipeline()
     tranformer = ColumnTransformer(
         [
+            ("yt_id", "passthrough", ["YT ID"]),
             ("title", text_pipeline, "Title"),
             ("description", text_pipeline, "Description"),
         ],

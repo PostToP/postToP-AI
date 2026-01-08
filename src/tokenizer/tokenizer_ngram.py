@@ -23,3 +23,6 @@ class TokenizerNgram(ITokenizer):
 
     def __repr__(self) -> str:
         return f"TokenizerNgram_{self.ngram_range[0]}-{self.ngram_range[1]}"
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return True

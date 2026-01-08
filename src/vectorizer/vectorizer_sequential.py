@@ -35,3 +35,6 @@ class VectorizerSequential(IVectorizer):
 
     def __repr__(self) -> str:
         return f"VectorizerSequential_{self.vocab_size}_{self.output_dim}"
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return self.vectorizer.get_vocab_size() > 0

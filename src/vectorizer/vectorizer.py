@@ -26,3 +26,6 @@ class IVectorizer:
 
     def __repr__(self) -> str:
         pass
+
+    def __sklearn_is_fitted__(self) -> bool:
+        pass

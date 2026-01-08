@@ -39,3 +39,6 @@ class VectorizerWord2Vec(IVectorizer):
 
     def __repr__(self) -> str:
         return f"VectorizerWord2Vec_{self.max_features}"
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return hasattr(self, "vectorizer")

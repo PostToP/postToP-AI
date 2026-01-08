@@ -31,3 +31,6 @@ class VectorizerTFIDF(IVectorizer):
 
     def __repr__(self) -> str:
         return f"VectorizerTFIDF_{len(self.vectorizer.vocabulary_)}"
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return len(self.vectorizer.vocabulary_) > 0

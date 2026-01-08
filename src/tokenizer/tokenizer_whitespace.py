@@ -10,3 +10,6 @@ class TokenizerWhitespace(ITokenizer):
 
     def __repr__(self) -> str:
         return "TokenizerWhitespace"
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return True

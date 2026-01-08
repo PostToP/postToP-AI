@@ -31,3 +31,6 @@ class VectorizerCount(IVectorizer):
 
     def __repr__(self) -> str:
         return f"VectorizerCount_{len(self.vectorizer.vocabulary_)}"
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return len(self.vectorizer.vocabulary_) > 0

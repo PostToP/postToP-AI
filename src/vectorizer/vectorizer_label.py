@@ -25,3 +25,6 @@ class VectorizerLabel(IVectorizer):
 
     def __repr__(self) -> str:
         return "VectorizerLabel"
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return len(self.vectorizer.classes_) > 0

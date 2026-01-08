@@ -25,3 +25,6 @@ class TokenizerBPE(ITokenizer):
 
     def __repr__(self) -> str:
         return f"TokenizerBPE_{self.vocab_size}"
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return self.tokenizer is not None

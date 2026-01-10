@@ -7,9 +7,8 @@ from model.model_wrapper import ModelWrapper
 logger = logging.getLogger("prod")
 logger.setLevel(logging.DEBUG)
 
-model = ModelWrapper.deserialize("model/v1.pkl")
-model.load_model()
-logger.info("Model loaded")
+model = ModelWrapper.deserialize("model/model_wrapper.tar.gz")
+logger.info("ModelWrapper deserialized")
 model.warmup()
 logger.info("Model warmed up")
 
@@ -23,7 +22,7 @@ def predict() -> Response:
         title = data["title"]
         description = data["description"]
         categories = data["categories"]
-        duration = [data["duration"]]
+        duration = data["duration"]
 
         logger.info(f"Processing request with title: {title[:30]}...")
 
@@ -37,6 +36,7 @@ def predict() -> Response:
             },
         )
     except Exception as e:
+        logger.exception(f"Error during prediction: {e}")
         return jsonify(
             {
                 "error": str(e),

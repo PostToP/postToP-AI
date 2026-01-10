@@ -4,24 +4,12 @@ import numpy as np
 import optuna
 import pandas as pd
 import tensorflow as tf
-from sklearn.pipeline import FunctionTransformer, Pipeline
 from tensorflow.keras import layers, regularizers
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.layers import (
-    Dense,
-    Dropout,
-    Embedding,
-    GlobalAveragePooling1D,
     Input,
 )
 from tensorflow.keras.models import Model
-
-from data.text_cleaning import split_dataset
-from model.model_wrapper import ModelWrapper
-from vectorizer.vectorizer_bucket import VectorizerBucket
-from tokenizer.tokenizer_whitespace import TokenizerWhitespace
-from vectorizer.vectorizer_label import VectorizerLabel
-from vectorizer.vectorizer_sequential import VectorizerSequential
 
 logger = logging.getLogger("experiment")
 
@@ -68,36 +56,34 @@ def build_model(params: dict) -> Model:
     return model
 
 
+def load_split(path: str) -> tuple:
+    data = np.load(path, allow_pickle=True)
+    X = [
+        data["YT_ID"],
+        data["Title"],
+        data["Description"],
+        data["Categories"],
+        data["Duration"],
+    ]
+    y = data["Labels"]
+    return X, y
+
+
 def train_and_evaluate(
-    input_frames: list,
-    pipelines: list,
+    train_df: tuple,
+    test_df: tuple,
+    val_df: tuple,
     model_params: dict,
 ) -> tuple[Model, float, float]:
-    dataset = pd.concat(input_frames, ignore_index=True, axis=1)
-    train_df, val_df = split_dataset(dataset, test_size=0.1)
-    val_df, test_df = split_dataset(val_df, test_size=0.5)
+    train_inputs = train_df[0]
+    val_inputs = val_df[0]
+    test_inputs = test_df[0]
 
-    train_inputs = []
-    val_inputs = []
-    test_inputs = []
+    train_labels = train_df[1]
+    val_labels = val_df[1]
+    test_labels = test_df[1]
 
-    for i in range(len(input_frames) - 1):
-        pipeline = pipelines[i]
-        train_input = pipeline.fit_transform(train_df[i])
-        val_input = pipeline.transform(val_df[i])
-        test_input = pipeline.transform(test_df[i])
-
-        train_inputs.append(train_input)
-        val_inputs.append(val_input)
-        test_inputs.append(test_input)
-        logger.info(f"Pipeline {i} done")
-        logger.debug(
-            f"Pipeline {i} train shape: {train_input.shape}, val shape: {val_input.shape}, test shape: {test_input.shape}",
-        )
-
-    train_labels = train_df[len(input_frames) - 1].to_numpy(dtype=int)
-    val_labels = val_df[len(input_frames) - 1].to_numpy(dtype=int)
-    test_labels = test_df[len(input_frames) - 1].to_numpy(dtype=int)
+    print(train_inputs[0].shape)
 
     model_params["title_input_dim"] = train_inputs[0].shape[1]
     model_params["desc_input_dim"] = train_inputs[1].shape[1]
@@ -148,17 +134,34 @@ def train_and_evaluate(
 
 def flag_suspicious_rows(
     model: Model,
-    dataset: object,
-    pipelines: list,
 ) -> pd.DataFrame:
-    input_rows = ["Title", "Description", "Categories", "Duration"]
-    input_frames = []
-    for i in range(len(input_rows)):
-        pipeline = pipelines[i]
-        input_frame = pipeline.transform(dataset[input_rows[i]])
-        input_frames.append(input_frame)
-    train_labels = dataset["Is Music"].to_numpy(dtype=int)
-    train_inputs = input_frames
+    train_df = load_split("dataset/p4_train.npz")
+    val_df = load_split("dataset/p4_val.npz")
+    test_df = load_split("dataset/p4_test.npz")
+
+    all_inputs = []
+    for i in range(len(train_df[0])):
+        all_inputs.append(
+            np.concatenate(
+                [
+                    train_df[0][i],
+                    val_df[0][i],
+                    test_df[0][i],
+                ],
+                axis=0,
+            )
+        )
+    all_labels = np.concatenate(
+        [
+            train_df[1],
+            val_df[1],
+            test_df[1],
+        ],
+        axis=0,
+    )
+
+    train_inputs = all_inputs[1:]  # skip YT_ID
+    train_labels = all_labels
 
     train_preds = model.predict(train_inputs, batch_size=1024).flatten()
     train_labels_array = train_labels.astype(np.float32).flatten()
@@ -178,43 +181,32 @@ def flag_suspicious_rows(
     suspect_mask = (train_loss > loss_thresh) & (confidence > 0.8) & disagree
     suspect_row_ids = np.where(suspect_mask)[0]
     logger.warning(f"Flagged {len(suspect_row_ids)} suspicious rows")
-    suspect_rows = dataset.iloc[suspect_row_ids]
-    suspect_rows["Predicted Probability"] = train_preds[suspect_row_ids]
-    suspect_rows["Predicted Label"] = pred_label[suspect_row_ids]
 
-    suspect_rows = suspect_rows.assign(Loss=train_loss[suspect_row_ids])
-    suspect_rows = suspect_rows.sort_values(by="Loss", ascending=False)
+    suspect_rows = all_inputs[0][suspect_row_ids]
+    original_dataset = pd.read_json("dataset/videos.json")
+    yt_id_to_index = {yt_id: idx for idx, yt_id in enumerate(original_dataset["YT ID"])}
+    suspect_rows = [yt_id_to_index[yt_id] for yt_id in suspect_rows if yt_id in yt_id_to_index]
 
-    suspect_rows.to_csv("model/suspect_rows.csv", index=False)
+    suspect_rows_df = original_dataset.iloc[suspect_rows]
+    suspect_rows_df = suspect_rows_df.assign(
+        Predicted_Probability=train_preds[suspect_row_ids],
+        Predicted_Label=pred_label[suspect_row_ids],
+        Loss=train_loss[suspect_row_ids],
+    )
+    suspect_rows_df = suspect_rows_df.sort_values(by="Loss", ascending=False)
+    suspect_rows_df.to_csv("model/suspect_rows.csv", index=False)
 
 
 def create_model() -> None:
-    df = pd.read_json("dataset/p2_dataset.json")
-    logger.info(f"Dataset size: {len(df)}")
+    train_df = load_split("dataset/p4_train.npz")
+    val_df = load_split("dataset/p4_val.npz")
+    test_df = load_split("dataset/p4_test.npz")
+
+    train_df = (train_df[0][1:], train_df[1])
+    val_df = (val_df[0][1:], val_df[1])
+    test_df = (test_df[0][1:], test_df[1])
 
     logger.info("Compiling model")
-    title_pipeline = Pipeline(
-        [
-            ("tokenizer", TokenizerWhitespace()),
-            ("vectorizer", VectorizerSequential(8500, 20)),
-        ],
-    )
-    description_pipeline = Pipeline(
-        [
-            ("tokenizer", TokenizerWhitespace()),
-            ("vectorizer", VectorizerSequential(5000, 30)),
-        ],
-    )
-    category_pipeline = Pipeline(
-        [
-            ("vectorizer", VectorizerLabel()),
-        ],
-    )
-    duration_pipeline = Pipeline(
-        [
-            ("nothing2", VectorizerBucket([0, 60, 180, 360, 9999999])),
-        ]
-    )
 
     model_params = {
         "title_vocab_size": 8500,
@@ -225,32 +217,22 @@ def create_model() -> None:
     }
 
     storage_name = "sqlite:///optuna_study.db"
-    study = optuna.create_study(
+    study = optuna.load_study(
         study_name="hypeparam_tuning",
-        directions=["minimize", "maximize"],
         storage=storage_name,
-        load_if_exists=True,
     )
 
     best_params = study.best_trials[0].params
     model_params.update(best_params)
 
     model, _loss, _acc = train_and_evaluate(
-        [df["Title"], df["Description"], df["Categories"], df["Duration"], df["Is Music"]],
-        [title_pipeline, description_pipeline, category_pipeline, duration_pipeline],
+        train_df,
+        test_df,
+        val_df,
         model_params,
     )
 
-    flag_suspicious_rows(model, df, [title_pipeline, description_pipeline, category_pipeline, duration_pipeline])
+    flag_suspicious_rows(model)
+    model.summary()
 
-    logger.debug(f"Title pipeline: {title_pipeline}")
-    logger.debug(f"Description pipeline: {description_pipeline}")
-    logger.debug(f"Category pipeline: {category_pipeline}")
-
-    logger.info("Encoding data")
-
-    converter = tf.lite.TFLiteConverter.from_keras_model(model)
-    tflite_model = converter.convert()
-    model_wrapper = ModelWrapper(title_pipeline, description_pipeline, category_pipeline)
-    model_wrapper.save_model(tflite_model, "model/model.tflite")
-    model_wrapper.serialize("model/v1.pkl")
+    model.save("model/final_model.keras")

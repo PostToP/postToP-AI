@@ -4,7 +4,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from sklearn.compose import ColumnTransformer
 
-from data.text_cleaning import DatasetPreprocessor, generate_new_pipeline
+from data.text_cleaning import DatasetPreprocessor, TextPreprocessor, generate_new_pipeline
 
 load_dotenv()
 
@@ -19,21 +19,20 @@ def preprocess_dataset() -> pd.DataFrame:
     # Initial data cleaning
     dataset["Title"] = dataset["Title"].fillna("")
     dataset["Description"] = dataset["Description"].fillna("")
-
+    artist_names = TextPreprocessor.get_artist_names(dataset["Description"], dataset["Channel Name"])
     # Process text columns
-    column_names = dataset.columns.tolist()
-    text_pipeline = generate_new_pipeline()
+    text_pipeline = generate_new_pipeline(artist_name=artist_names, verbose=True)
     transformer = ColumnTransformer(
         [
-            ("yt_id", "passthrough", ["YT ID"]),
             ("title", text_pipeline, "Title"),
             ("description", text_pipeline, "Description"),
         ],
+        verbose_feature_names_out=False,
         remainder="passthrough",
         verbose=True,
-    )
+    ).set_output(transform="pandas")
     processed_dataset = transformer.fit_transform(dataset)
-    processed_dataset = pd.DataFrame(processed_dataset, columns=column_names)
+
     len_before = len(processed_dataset)
     processed_dataset = DatasetPreprocessor.remove_similar_rows(processed_dataset)
     len_after = len(processed_dataset)

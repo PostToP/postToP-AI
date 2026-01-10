@@ -1,9 +1,14 @@
-import dill
+import tarfile
+import tempfile
+from pathlib import Path
+
+import joblib
 import numpy as np
-from ai_edge_litert.interpreter import Interpreter
 import pandas as pd
+from ai_edge_litert.interpreter import Interpreter
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+
 from data.text_cleaning import generate_new_pipeline
 
 
@@ -13,28 +18,72 @@ class ModelWrapper:
         title_pipeline: Pipeline,
         description_pipeline: Pipeline,
         category_pipeline: Pipeline,
+        duration_pipeline: Pipeline,
+        interpreter: object,
     ) -> None:
         self.title_pipeline = title_pipeline
         self.description_pipeline = description_pipeline
         self.category_pipeline = category_pipeline
-        self.text_cleaner = generate_new_pipeline()
-
-    def save_model(self, model: bytes, model_loc: str) -> None:
-        with open(model_loc, "wb") as f:
-            f.write(model)
-        self.model_path = model_loc
+        self.duration_pipeline = duration_pipeline
+        self.text_cleaner = generate_new_pipeline(verbose=False)
+        self.interpreter = interpreter
 
     def serialize(self, location: str) -> None:
-        with open(location, "wb") as f:
-            dill.dump(self, f)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            components = {
+                "title_pipeline.joblib": self.title_pipeline,
+                "description_pipeline.joblib": self.description_pipeline,
+                "category_pipeline.joblib": self.category_pipeline,
+                "duration_pipeline.joblib": self.duration_pipeline,
+                "model.tflite": self.interpreter,
+            }
 
-    def deserialize(location: str) -> bytes:  # noqa: N805
-        with open(location, "rb") as f:
-            return dill.load(f)
+            for filename, obj in components.items():
+                filepath = Path(tmpdir) / filename
+                if filename.endswith(".joblib"):
+                    self.__serialize_pipeline(obj, filepath)
+                elif filename.endswith(".tflite"):
+                    self.__serialize_model(obj, filepath)
 
-    def load_model(self) -> None:
-        self.interpreter = Interpreter(self.model_path)
-        self.interpreter.allocate_tensors()
+            with tarfile.open(location, "w:gz") as tar:
+                for filename in components:
+                    filepath = Path(tmpdir) / filename
+                    tar.add(filepath, arcname=filename)
+
+    @staticmethod
+    def __serialize_pipeline(pipeline: Pipeline, filepath: str) -> None:
+        with open(filepath, "wb") as f:
+            joblib.dump(pipeline, f)
+
+    @staticmethod
+    def __serialize_model(model: object, filepath: str) -> None:
+        with open(filepath, "wb") as f:
+            f.write(model)
+
+    @staticmethod
+    def deserialize(location: str) -> "ModelWrapper":
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with tarfile.open(location, "r:gz") as tar:
+                tar.extractall(tmpdir, filter="data")
+                members = tar.getmembers()
+
+            components = {}
+            interpreter = None
+            for member in members:
+                member_path = Path(tmpdir) / member.name
+                if member.name.endswith(".joblib"):
+                    with open(member_path, "rb") as f:
+                        components[member.name] = joblib.load(f)
+                elif member.name.endswith(".tflite"):
+                    interpreter = Interpreter(member_path)
+        interpreter.allocate_tensors()
+        return ModelWrapper(
+            title_pipeline=components["title_pipeline.joblib"],
+            description_pipeline=components["description_pipeline.joblib"],
+            category_pipeline=components["category_pipeline.joblib"],
+            duration_pipeline=components["duration_pipeline.joblib"],
+            interpreter=interpreter,
+        )
 
     def warmup(self) -> None:
         self.predict("Warmup title", "Warmup description", ["Music"], [300])
@@ -65,12 +114,12 @@ class ModelWrapper:
         title = self.title_pipeline.transform([title])
         description = self.description_pipeline.transform([description])
         category = self.category_pipeline.transform([category])
-        duration = [duration]
+        duration = self.duration_pipeline.transform([duration])
 
         title = np.array(title).reshape(1, -1).astype(np.float32)
         description = np.array(description).reshape(1, -1).astype(np.float32)
         category = np.array(category).reshape(1, -1).astype(np.float32)
-        duration = np.array(duration).astype(np.float32)
+        duration = np.array(duration).reshape(1, -1).astype(np.float32)
 
         return title, description, category, duration
 
@@ -81,6 +130,7 @@ class ModelWrapper:
         category: list,
         duration: list,
     ) -> float:
+        duration = [duration]  # ensure duration is a list
         title, description, category, duration = self.preprocess_input(title, description, category, duration)
         input_details = self.interpreter.get_input_details()
         output_details = self.interpreter.get_output_details()

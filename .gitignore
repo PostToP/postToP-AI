@@ -175,6 +175,7 @@ cython_debug/
 
 *.pkl
 dataset/
+model/
 .vscode/
 *.tar
 *.tflite

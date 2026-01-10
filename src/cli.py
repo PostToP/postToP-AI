@@ -27,11 +27,32 @@ def run_optuna() -> None:
     optuna_main()
 
 
+def run_feature() -> None:
+    from src.model.feature_extraction import prepare_datasets_and_pipelines
+
+    prepare_datasets_and_pipelines()
+
+
+def run_split() -> None:
+    from src.data.split_dataset import split_dataset
+
+    split_dataset()
+
+
+def compile_model() -> None:
+    from model.compile import create_model_wrapper
+
+    create_model_wrapper()
+
+
 def main() -> None:
     COMMANDS = {
         "fetch": run_fetch,
         "preprocess": run_preprocess,
+        "split": run_split,
+        "feature": run_feature,
         "train": run_train,
+        "compile": compile_model,
         "optuna": run_optuna,
     }
 

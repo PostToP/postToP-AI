@@ -1,8 +1,6 @@
-import multiprocessing
 import random
 import re
-from functools import partial
-from typing import Callable
+from collections.abc import Callable
 from unicodedata import combining, normalize
 
 import contractions
@@ -17,7 +15,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import FunctionTransformer, Pipeline
 from tldextract import extract
-from tqdm import tqdm
 from unidecode import unidecode
 
 from config.config import (
@@ -282,6 +279,19 @@ class TextPreprocessor:
         return re.sub(pattern, "", text, flags=re.IGNORECASE)
 
     @staticmethod
+    def build_wordpair_remover(filtered_artist_names: list[str]):
+        escaped = map(re.escape, filtered_artist_names)
+        pattern = re.compile(
+            rf"\b(?:{'|'.join(escaped)})\b",
+            flags=re.IGNORECASE,
+        )
+
+        def remove_wordpairs(text: str) -> str:
+            return pattern.sub("", text)
+
+        return remove_wordpairs
+
+    @staticmethod
     def to_lower(text: str) -> str:
         """Convert text to lowercase.
 
@@ -430,9 +440,13 @@ class DatasetPreprocessor:
         return new_df
 
 
-def generate_new_pipeline() -> Pipeline:
+def generate_new_pipeline(artist_name=[], verbose=True) -> Pipeline:
     def wrapper(func: Callable) -> Callable:
         return FunctionTransformer(lambda x: x.apply(func), validate=False)
+
+    def artist_removal_func(texts: pd.Series) -> pd.Series:
+        remover = TextPreprocessor.build_wordpair_remover(artist_name)
+        return texts.apply(remover)
 
     pipe = Pipeline(
         [
@@ -442,6 +456,7 @@ def generate_new_pipeline() -> Pipeline:
             ("remove_emails", wrapper(TextPreprocessor.remove_emails)),
             ("remove_ats", wrapper(TextPreprocessor.remove_ats)),
             # todo: remove artist names, maybe
+            ("remove_artist_names", FunctionTransformer(artist_removal_func, validate=False)),
             ("to_lower", wrapper(TextPreprocessor.to_lower)),
             ("expand_contractions", wrapper(TextPreprocessor.expand_contractions)),
             ("remove_hyphen", wrapper(TextPreprocessor.remove_hyphen)),
@@ -453,7 +468,7 @@ def generate_new_pipeline() -> Pipeline:
             ("to_lower2", wrapper(TextPreprocessor.to_lower)),
             ("convert_to_dataframe", FunctionTransformer(lambda x: pd.DataFrame(x))),
         ],
-        verbose=True,
+        verbose=verbose,
     )
     return pipe
 

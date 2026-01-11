@@ -75,7 +75,9 @@ class ModelWrapper:
                     with open(member_path, "rb") as f:
                         components[member.name] = joblib.load(f)
                 elif member.name.endswith(".tflite"):
-                    interpreter = Interpreter(member_path)
+                    with open(member_path, "rb") as f:
+                        model_bytes = f.read()
+                        interpreter = Interpreter(model_content=model_bytes)
         interpreter.allocate_tensors()
         return ModelWrapper(
             title_pipeline=components["title_pipeline.joblib"],

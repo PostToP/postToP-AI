@@ -176,3 +176,8 @@ cython_debug/
 dataset/
 .vscode/
 *.tar
+*.db
+*.ipynb
+
+Dockerfile
+.dockerignore

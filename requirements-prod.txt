@@ -3,7 +3,6 @@ contractions==0.1.73
 dill==0.3.8
 Flask==3.1.2
 ftfy==6.3.1
-gensim==4.3.3
 nltk==3.9.1
 pandas==2.3.2
 python-dotenv==1.1.1
